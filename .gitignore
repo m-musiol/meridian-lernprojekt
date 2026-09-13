@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment / Secrets
+.env
+
+# Daten: deterministisch per Seed reproduzierbar (siehe README), daher nicht versioniert
+data/raw/*
+data/interim/*
+data/processed/*
+!data/raw/.gitkeep
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# data/ground_truth/ wird bewusst versioniert (Modell-vs-Wahrheit-Vergleich, Lernzweck)
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.idea/

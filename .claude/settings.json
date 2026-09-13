@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(git checkout*)",
+      "Bash(git push origin*)",
+      "Bash(gh auth status*)",
+      "Bash(gh repo create*)",
+      "Bash(gh repo view*)",
+      "Bash(gh issue*)",
+      "Bash(gh pr*)",
+      "Bash(python -m venv*)",
+      "Bash(python *)",
+      "Bash(python3 *)",
+      "Bash(pip install*)",
+      "Bash(pytest*)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push*:main)",
+      "Bash(rm -rf*)",
+      "Bash(sudo*)"
+    ]
+  }
+}

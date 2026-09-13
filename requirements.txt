@@ -1,0 +1,25 @@
+# Kernbibliothek MMM (benötigt Python 3.11 oder 3.12)
+google-meridian>=1.0.0
+# Für GPU-Training unter Linux (z.B. Google Colab) stattdessen:
+# google-meridian[and-cuda]>=1.0.0
+
+# Datastack
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
+plotly>=5.18
+
+# Notebooks
+jupyter>=1.0
+ipykernel>=6.25
+
+# Utilities
+python-dotenv>=1.0
+pyyaml>=6.0
+
+# Testing
+pytest>=7.4
+pytest-cov>=4.1
+
+# Persistenz (Stufe 4+, optional)
+supabase>=2.0
