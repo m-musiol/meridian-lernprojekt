@@ -54,3 +54,16 @@ unabhängigen Projekten (Trading-/Reddit-Analyse) getrennt.
 **Ergebnis:** 🟢 **Freigegeben.** Nutzer hat `docs/stakeholder_briefing.md` (Business-Fragen, KPIs, Kanäle,
 Budgetrahmen, Zeitraum, Erfolgskriterien) ohne Änderungswünsche bestätigt. Weiter zu Stufe 1
 (Datenbeschaffung/-generierung).
+
+---
+
+## 2026-09-13 — Übergangslösung Python-Umgebung für den Generator
+
+**Befund:** Auf dem System-Python 3.9.13 sind pandas/numpy bereits installiert. Der eigene
+Datengenerator (Datenquelle 2) braucht kein `google-meridian` und läuft damit unabhängig von der
+offenen Python-3.12-Installation.
+
+**Entscheidung:** Generator-Code wird jetzt mit dem System-Python 3.9.13 entwickelt und getestet, um
+nicht auf die manuelle Python-3.12-Installation zu warten. Sobald das `.venv` mit Python 3.12 steht,
+wird derselbe Code dort erneut ausgeführt (reiner pandas/numpy-Code, keine Versions-Inkompatibilität
+zu erwarten). Kein dauerhafter Ersatz für das projektspezifische venv — nur Übergangslösung für Stufe 1.
