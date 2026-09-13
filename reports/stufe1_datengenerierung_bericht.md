@@ -18,15 +18,15 @@ Diese Werte werden beim Aufruf des Skripts per CLI-Flag gesetzt (siehe `--help`)
 
 | Kanal | Spend gesamt (EUR) | Ziel-ROI | realisierter ROI | Adstock-Decay | Hill-Slope | Hill-EC50 |
 |---|---|---|---|---|---|---|
-| TV | 11,231,268 | 1.50 | 1.50 | 0.60 | 1.50 | 3,098,760 |
-| Video_YouTube | 1,872,483 | 1.40 | 1.40 | 0.30 | 1.20 | 219,991 |
-| Programmatic_Display | 5,629,479 | 1.20 | 1.20 | 0.20 | 1.00 | 2,341,024 |
-| Paid_Social | 5,619,843 | 2.00 | 2.00 | 0.25 | 1.30 | 1,186,477 |
-| Paid_Search_Brand | 2,987,655 | 4.00 | 4.00 | 0.10 | 1.00 | 192,496 |
-| Paid_Search_NonBrand | 4,502,901 | 2.50 | 2.50 | 0.15 | 1.00 | 371,666 |
-| Affiliate | 1,878,963 | 2.00 | 2.00 | 0.20 | 1.00 | 190,692 |
-| Out_of_Home | 1,774,566 | 1.00 | 1.00 | 0.40 | 1.20 | 754,477 |
-| Radio | 6,642,948 | 1.10 | 1.10 | 0.50 | 1.20 | 2,870,599 |
+| TV | 9,954,699 | 1.50 | 1.50 | 0.60 | 1.50 | 2,331,481 |
+| Video_YouTube | 1,486,999 | 1.40 | 1.40 | 0.30 | 1.20 | 167,496 |
+| Programmatic_Display | 4,631,473 | 1.20 | 1.20 | 0.20 | 1.00 | 1,300,382 |
+| Paid_Social | 5,013,872 | 2.00 | 2.00 | 0.25 | 1.30 | 981,629 |
+| Paid_Search_Brand | 2,880,876 | 4.00 | 4.00 | 0.10 | 1.00 | 172,934 |
+| Paid_Search_NonBrand | 4,722,678 | 2.50 | 2.50 | 0.15 | 1.00 | 331,108 |
+| Affiliate | 1,615,948 | 2.00 | 2.00 | 0.20 | 1.00 | 189,210 |
+| Out_of_Home | 1,485,140 | 1.00 | 1.00 | 0.40 | 1.20 | 528,561 |
+| Radio | 1,829,640 | 1.10 | 1.10 | 0.50 | 1.20 | 593,760 |
 
 ### Wie werden diese Kennzahlen berechnet, und was sagen sie aus?
 
@@ -41,7 +41,7 @@ Reale Mediadaten sind nie perfekt — deshalb baut der Generator zwei typische P
 
 - **Fehlende Wochen bei Out_of_Home:** 5.1% der Geo-Wochen sind `NaN` (zufaellig je Geo ausgewaehlt, simuliert unvollstaendige Kanal-Meldungen/Datenlieferung).
 - **Fehlende Wochen bei Radio:** 5.1% der Geo-Wochen sind `NaN` (zufaellig je Geo ausgewaehlt, simuliert unvollstaendige Kanal-Meldungen/Datenlieferung).
-- **TV↔Radio-Spend-Korrelation:** 0.968 (Pearson-Korrelation des `spend_eur` ueber alle Geo-Wochen). Radio-Spend wird bewusst teils aus dem TV-Spend abgeleitet (`derive_radio_spend`), weil Media-Planer beide Kanaele in der Praxis oft gemeinsam takten — das erschwert es einem Modell, die Einzelwirkung beider Kanaele sauber zu trennen (Multikollinearitaet, klassischer VIF-Kandidat in Stufe 2). Zum Vergleich andere Kanalpaare: TV<->Programmatic_Display = 0.831, TV<->Paid_Social = 0.864, Radio<->Programmatic_Display = 0.827 — deutlich niedriger, da dort nur die gemeinsame Saisonalitaet durchschlaegt, nicht die gezielte Kopplung.
+- **TV↔Radio-Spend-Korrelation:** 0.589 (Pearson-Korrelation des Spends pro Kopf je Geo-Woche — absolute EUR-Werte wuerden vor allem den Geo-Groesseneffekt messen, siehe `compute_noise_layer_metrics`). Radio behaelt sein eigenes Budget, aber ein Teil seiner Verteilung ueber Geo/Zeit folgt bewusst dem TV-Muster (`derive_radio_spend`), weil Media-Planer beide Kanaele in der Praxis oft gemeinsam takten — das erschwert es einem Modell, die Einzelwirkung beider Kanaele sauber zu trennen (Multikollinearitaet, klassischer VIF-Kandidat in Stufe 2). Hoechste Korrelation unter allen anderen Kanalpaaren: Paid_Search_NonBrand<->Paid_Social = 0.525 — spuerbar niedriger, da dort nur die gemeinsame (leicht kanal-spezifisch verschobene) Saisonalitaet durchschlaegt, nicht die gezielte Kopplung.
 
 ## 4. Verteilung der Zielgroessen (KPIs)
 
@@ -49,8 +49,8 @@ Werte je Geo-Woche, nach der Kombination aus Baseline + Kanalbeitraegen + Kontro
 
 | KPI | Minimum | Median | Mittelwert | Maximum |
 |---|---|---|---|---|
-| Revenue (EUR) | 107,164 | 362,440 | 370,749 | 803,428 |
-| Website-Sessions | 2,806 | 8,892 | 9,132 | 19,905 |
+| Revenue (EUR) | 103,669 | 360,791 | 363,831 | 778,694 |
+| Website-Sessions | 2,806 | 8,875 | 9,041 | 19,961 |
 
 Keine negativen Werte moeglich (durch `np.clip` vor dem Rauschen abgesichert). Die Spanne zwischen Minimum und Maximum entsteht durch die Kombination aus unterschiedlich grossen Geos (Bevoelkerung), Saisonalitaet (Q1-/Q4-Peaks) und den Media-/Kontrolleffekten — genau diese Variation braucht ein MMM-Modell spaeter, um Kanalwirkungen ueberhaupt schaetzen zu koennen.
 

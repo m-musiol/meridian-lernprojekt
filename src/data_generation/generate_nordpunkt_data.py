@@ -50,9 +50,28 @@ def national_spend_series(
 ) -> np.ndarray:
     annual_budget = cfg.total_annual_media_budget_eur * channel.annual_budget_share
     base_weekly = annual_budget / 52.0
-    trend = 1.0 + 0.002 * np.arange(cfg.n_weeks)  # leichtes organisches Wachstum ueber 3 Jahre
+    # kanal-eigene Trendrichtung (nicht nur -staerke): manche Kanaele wachsen, andere schrumpfen
+    # leicht ueber die 3 Jahre, sonst waeren ALLE Kanaele allein durch "beide steigen ueber die Zeit"
+    # kuenstlich hochkorreliert, unabhaengig von der genauen Rate.
+    trend_rate = rng.uniform(-0.0015, 0.003)
+    trend = 1.0 + trend_rate * np.arange(cfg.n_weeks)
+    channel_seasonal = jitter_seasonal(seasonal, rng)
     noise = rng.lognormal(mean=0.0, sigma=cfg.noise_sigma, size=cfg.n_weeks)
-    return base_weekly * trend * seasonal * noise
+    return base_weekly * trend * channel_seasonal * noise
+
+
+def jitter_seasonal(base_seasonal: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """Leicht kanal-spezifische Verschiebung/Skalierung der saisonalen Nachfragekurve.
+
+    Ohne diese Streuung wuerden alle Kanaele exakt im Gleichschritt schwanken (identische
+    Kurvenform) und dadurch kuenstlich fast perfekt miteinander korrelieren — die bewusst
+    eingebaute TV/Radio-Kollinearitaet (siehe derive_radio_spend) waere dann nicht mehr von
+    dieser generischen "alle Kanaele teilen sich die Saison"-Korrelation zu unterscheiden.
+    """
+    phase_shift_weeks = int(rng.integers(-6, 7))  # Peak-Breite (Gauss-Sigma) ist 4 Wochen, Shift muss vergleichbar gross sein
+    amplitude_scale = rng.uniform(0.5, 1.5)
+    shifted = np.roll(base_seasonal - 1.0, phase_shift_weeks)
+    return 1.0 + shifted * amplitude_scale
 
 
 def split_across_geos(
@@ -74,10 +93,20 @@ def derive_radio_spend(
     geo_df: pd.DataFrame,
     rng: np.random.Generator,
 ) -> np.ndarray:
-    """Radio hat einen eigenen Sockel-Spend plus einen TV-korrelierten Anteil (bewusste Kollinearitaet)."""
-    own_baseline = split_across_geos(national_spend_series(channel, cfg, seasonal, rng), geo_df, rng)
-    correlated_extra = 0.45 * tv_spend_geo * rng.lognormal(mean=0.0, sigma=0.15, size=tv_spend_geo.shape)
-    return own_baseline + correlated_extra
+    """Radio behaelt sein eigenes Budget (annual_budget_share), aber die Verteilung ueber Geo/Zeit
+
+    ist teils am TV-Muster ausgerichtet — Media-Planer takten beide Kanaele oft aehnlich, ohne dass
+    dadurch automatisch mehr Geld fliesst. Das erzeugt echte, aber budgetneutrale Kollinearitaet
+    (im Gegensatz zu einem simplen Aufschlag "on top", der Radios Budgetanteil verzerren wuerde).
+    """
+    own_spend_geo = split_across_geos(national_spend_series(channel, cfg, seasonal, rng), geo_df, rng)
+    tv_shape = tv_spend_geo / tv_spend_geo.mean()
+    own_shape = own_spend_geo / own_spend_geo.mean()
+
+    tv_pattern_share = 0.9  # Anteil, zu dem Radios Verteilung dem TV-Muster folgt
+    blended_shape = tv_pattern_share * tv_shape + (1 - tv_pattern_share) * own_shape
+    noise = rng.lognormal(mean=0.0, sigma=0.05, size=tv_spend_geo.shape)
+    return own_spend_geo.mean() * blended_shape * noise
 
 
 def spend_to_impressions(
@@ -303,21 +332,34 @@ def media_to_long_df(media: dict, geo_df: pd.DataFrame, time_index: pd.DatetimeI
     return pd.concat(frames, ignore_index=True)
 
 
-def compute_noise_layer_metrics(media_df: pd.DataFrame) -> dict:
-    """Fehlende-Wochen-Anteil je Kanal und TV<->Radio-Spend-Korrelation, fuer Stufe-2-Uebung."""
+def compute_noise_layer_metrics(media_df: pd.DataFrame, geo_df: pd.DataFrame) -> dict:
+    """Fehlende-Wochen-Anteil je Kanal und TV<->Radio-Spend-Korrelation (pro Kopf, Geo-Wochen-Ebene).
+
+    Pro-Kopf-Normalisierung ist noetig: in absoluten EUR wuerde die Korrelation ueberwiegend den
+    Geo-Groesseneffekt messen (grosse Geos geben bei JEDEM Kanal mehr aus), nicht echte zeitliche
+    Kollinearitaet. Gleiche Methodik wie src/data_quality/checks.py, damit beide Berichte konsistent sind.
+    """
     missing_share = media_df.groupby("channel")["spend_eur"].apply(lambda s: s.isna().mean())
     affected_channels = missing_share[missing_share > 0]
 
-    wide_spend = media_df.pivot_table(index=["geo", "time"], columns="channel", values="spend_eur")
-    tv_radio_corr = wide_spend["TV"].corr(wide_spend["Radio"])
-    other_pairs = [
-        ("TV", "Programmatic_Display"), ("TV", "Paid_Social"), ("Radio", "Programmatic_Display"),
-    ]
-    other_corrs = {f"{a}<->{b}": wide_spend[a].corr(wide_spend[b]) for a, b in other_pairs}
+    merged = media_df.merge(geo_df[["geo", "population"]], on="geo")
+    merged["spend_per_capita"] = merged["spend_eur"] / merged["population"]
+    wide = merged.pivot_table(index=["geo", "time"], columns="channel", values="spend_per_capita").fillna(0)
+    corr = wide.corr()
+    np.fill_diagonal(corr.values, 0)
+    tv_radio_corr = corr.loc["TV", "Radio"]
+
+    corr_without_tv_radio = corr.copy()
+    corr_without_tv_radio.loc["TV", "Radio"] = 0
+    corr_without_tv_radio.loc["Radio", "TV"] = 0
+    highest_other_pair = corr_without_tv_radio.stack().idxmax()
+    highest_other_corr = corr_without_tv_radio.values.max()
+
     return {
         "missing_share_by_channel": affected_channels.to_dict(),
         "tv_radio_correlation": tv_radio_corr,
-        "other_pair_correlations": other_corrs,
+        "highest_other_pair": highest_other_pair,
+        "highest_other_pair_corr": highest_other_corr,
     }
 
 
@@ -339,8 +381,9 @@ def write_report(
     channel_gt: dict,
     media_df: pd.DataFrame,
     controls_kpi_df: pd.DataFrame,
+    geo_df: pd.DataFrame,
 ) -> None:
-    noise_metrics = compute_noise_layer_metrics(media_df)
+    noise_metrics = compute_noise_layer_metrics(media_df, geo_df)
     kpi_summary = compute_kpi_summary(controls_kpi_df)
 
     lines = [
@@ -405,14 +448,18 @@ def write_report(
             "(zufaellig je Geo ausgewaehlt, simuliert unvollstaendige Kanal-Meldungen/Datenlieferung)."
         )
     tv_radio_corr = noise_metrics["tv_radio_correlation"]
+    other_pair = noise_metrics["highest_other_pair"]
+    other_corr = noise_metrics["highest_other_pair_corr"]
     lines.append(
-        f"- **TV↔Radio-Spend-Korrelation:** {tv_radio_corr:.3f} (Pearson-Korrelation des `spend_eur` "
-        "ueber alle Geo-Wochen). Radio-Spend wird bewusst teils aus dem TV-Spend abgeleitet "
-        "(`derive_radio_spend`), weil Media-Planer beide Kanaele in der Praxis oft gemeinsam takten — "
-        "das erschwert es einem Modell, die Einzelwirkung beider Kanaele sauber zu trennen "
-        "(Multikollinearitaet, klassischer VIF-Kandidat in Stufe 2). Zum Vergleich andere Kanalpaare: "
-        + ", ".join(f"{pair} = {corr:.3f}" for pair, corr in noise_metrics["other_pair_correlations"].items())
-        + " — deutlich niedriger, da dort nur die gemeinsame Saisonalitaet durchschlaegt, nicht die "
+        f"- **TV↔Radio-Spend-Korrelation:** {tv_radio_corr:.3f} (Pearson-Korrelation des Spends "
+        "pro Kopf je Geo-Woche — absolute EUR-Werte wuerden vor allem den Geo-Groesseneffekt messen, "
+        "siehe `compute_noise_layer_metrics`). Radio behaelt sein eigenes Budget, aber ein Teil "
+        "seiner Verteilung ueber Geo/Zeit folgt bewusst dem TV-Muster (`derive_radio_spend`), weil "
+        "Media-Planer beide Kanaele in der Praxis oft gemeinsam takten — das erschwert es einem "
+        "Modell, die Einzelwirkung beider Kanaele sauber zu trennen (Multikollinearitaet, klassischer "
+        f"VIF-Kandidat in Stufe 2). Hoechste Korrelation unter allen anderen Kanalpaaren: "
+        f"{other_pair[0]}<->{other_pair[1]} = {other_corr:.3f} — spuerbar niedriger, da dort nur die "
+        "gemeinsame (leicht kanal-spezifisch verschobene) Saisonalitaet durchschlaegt, nicht die "
         "gezielte Kopplung.",
     )
 
@@ -497,7 +544,7 @@ def main() -> None:
         json.dumps(ground_truth, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
-    write_report(output_dir, ground_truth_dir, cfg, channel_ground_truth, media_df, controls_kpi_df)
+    write_report(output_dir, ground_truth_dir, cfg, channel_ground_truth, media_df, controls_kpi_df, geo_df)
 
     print(f"Media-Daten: {media_df.shape}, Controls/KPI: {controls_kpi_df.shape}")
     print(f"Geschrieben nach: {output_dir}/ und {ground_truth_dir}/")

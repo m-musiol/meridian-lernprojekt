@@ -67,3 +67,33 @@ offenen Python-3.12-Installation.
 nicht auf die manuelle Python-3.12-Installation zu warten. Sobald das `.venv` mit Python 3.12 steht,
 wird derselbe Code dort erneut ausgeführt (reiner pandas/numpy-Code, keine Versions-Inkompatibilität
 zu erwarten). Kein dauerhafter Ersatz für das projektspezifische venv — nur Übergangslösung für Stufe 1.
+
+---
+
+## 2026-09-13 — Lernpunkte aus Stufe 2: zwei Mess-Artefakte im Kollinearitäts-Check korrigiert
+
+Beim Bau des Stufe-2-Checks (`src/data_quality/checks.py`) zeigte der erste Durchlauf ein
+Gesamtvotum 🔴 ROT mit sehr hohem VIF (>19) für praktisch beliebige Kanalpaare, nicht nur für das
+bewusst gekoppelte TV/Radio-Paar. Ursachenanalyse ergab zwei unabhängige Mess-Artefakte — beide
+lehrreich genug für dieses Lernprojekt, um sie hier festzuhalten:
+
+1. **Geo-Größeneffekt:** Korrelation auf rohen EUR-Werten (Geo×Woche) maß hauptsächlich, dass große
+   Geos bei *jedem* Kanal automatisch mehr ausgeben — TV↔Display sprang dadurch von 0.48 (pro Kopf)
+   auf 0.94 (roh). **Fix:** Kollinearitäts-Check rechnet jetzt auf Spend *pro Kopf*, nicht auf
+   absoluten EUR-Werten.
+2. **Gemeinsamer deterministischer Trend/Saison:** Alle Kanäle nutzten identische Trend- und
+   Saisonkurven im Generator — zwei monoton wachsende Zeitreihen korrelieren fast immer stark,
+   unabhängig von der genauen Steigung. **Fix:** `generate_nordpunkt_data.py` gibt jedem Kanal jetzt
+   eine eigene Trendrichtung (`trend_rate` kann auch negativ sein) und eine leicht phasen-/
+   amplitudenverschobene Saisonkurve (`jitter_seasonal`), damit nur die *bewusst* gekoppelten Kanäle
+   (TV/Radio) auffällig korrelieren, nicht der ganze Kanal-Mix.
+
+Zusätzlich wurde `derive_radio_spend` von "TV-Spend on top addieren" (verzerrte Radios Budgetanteil
+auf ~13 Mio. EUR, weit über die im Stakeholder-Briefing vorgesehenen ~5 %) auf "Radios eigenes
+Budget, aber teilweise TV-Verteilungsmuster" umgestellt — budgetneutral, aber weiterhin klar
+identifizierbare Kollinearität (r≈0.59, VIF≈2.2, klar höchster Wert im Kanal-Set).
+
+**Ergebnis Gate 1 (Stufe 2, `reports/stage_gates/stage2_eignungsbericht.md`):** 🟡 **GELB** — einzige
+Einschränkung sind die bewusst eingebauten ~5,1 % fehlenden Wochen bei Out-of-Home/Radio (in
+`docs/model_card.md` dokumentiert). Alle anderen acht Kriterien grün. Vorgelegt zur Freigabe vor
+Beginn von Stufe 3 (EDA).

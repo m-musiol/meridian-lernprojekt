@@ -11,102 +11,102 @@
   "channels": {
     "TV": {
       "adstock_decay": 0.6,
-      "hill_ec50": 3098760.0637779497,
+      "hill_ec50": 2331481.11125049,
       "hill_slope": 1.5,
       "target_roi": 1.5,
-      "realized_roi": 1.5000000000000004,
+      "realized_roi": 1.5,
       "target_sessions_per_1000_eur": 5,
-      "max_revenue_effect": 30903.40511915869,
-      "max_sessions_effect": 103.01135039719563,
-      "total_spend_eur": 11231268.008224893
+      "max_revenue_effect": 23902.008543918313,
+      "max_sessions_effect": 79.67336181306105,
+      "total_spend_eur": 9954699.481861554
     },
     "Video_YouTube": {
       "adstock_decay": 0.3,
-      "hill_ec50": 219991.47535037587,
+      "hill_ec50": 167495.92808071466,
       "hill_slope": 1.2,
       "target_roi": 1.4,
-      "realized_roi": 1.4000000000000001,
+      "realized_roi": 1.4,
       "target_sessions_per_1000_eur": 40,
-      "max_revenue_effect": 4916.093837851413,
-      "max_sessions_effect": 140.4598239386118,
-      "total_spend_eur": 1872483.0692662755
+      "max_revenue_effect": 3783.7328181519597,
+      "max_sessions_effect": 108.10665194719886,
+      "total_spend_eur": 1486998.8005761404
     },
     "Programmatic_Display": {
       "adstock_decay": 0.2,
-      "hill_ec50": 2341024.3152987035,
+      "hill_ec50": 1300381.7596997195,
       "hill_slope": 1.0,
       "target_roi": 1.2,
-      "realized_roi": 1.1999999999999997,
+      "realized_roi": 1.2,
       "target_sessions_per_1000_eur": 60,
-      "max_revenue_effect": 11621.471299582101,
-      "max_sessions_effect": 581.0735649791051,
-      "total_spend_eur": 5629479.020167553
+      "max_revenue_effect": 7695.932170698983,
+      "max_sessions_effect": 384.7966085349492,
+      "total_spend_eur": 4631473.492639145
     },
     "Paid_Social": {
       "adstock_decay": 0.25,
-      "hill_ec50": 1186476.508395763,
+      "hill_ec50": 981629.3164192801,
       "hill_slope": 1.3,
       "target_roi": 2.0,
-      "realized_roi": 2.0000000000000004,
+      "realized_roi": 2.0,
       "target_sessions_per_1000_eur": 70,
-      "max_revenue_effect": 20132.259837259036,
-      "max_sessions_effect": 704.6290943040663,
-      "total_spend_eur": 5619843.466055027
+      "max_revenue_effect": 17530.040109526668,
+      "max_sessions_effect": 613.5514038334334,
+      "total_spend_eur": 5013871.771646626
     },
     "Paid_Search_Brand": {
       "adstock_decay": 0.1,
-      "hill_ec50": 192495.9474938186,
+      "hill_ec50": 172934.33461492416,
       "hill_slope": 1.0,
       "target_roi": 4.0,
-      "realized_roi": 4.0,
+      "realized_roi": 3.9999999999999996,
       "target_sessions_per_1000_eur": 90,
-      "max_revenue_effect": 22853.515450964787,
-      "max_sessions_effect": 514.2040976467076,
-      "total_spend_eur": 2987654.6968257884
+      "max_revenue_effect": 20808.477537404066,
+      "max_sessions_effect": 468.1907445915915,
+      "total_spend_eur": 2880875.864883784
     },
     "Paid_Search_NonBrand": {
       "adstock_decay": 0.15,
-      "hill_ec50": 371665.61687799613,
+      "hill_ec50": 331107.88062993356,
       "hill_slope": 1.0,
       "target_roi": 2.5,
       "realized_roi": 2.5,
       "target_sessions_per_1000_eur": 110,
-      "max_revenue_effect": 20161.95148843859,
-      "max_sessions_effect": 887.125865491298,
-      "total_spend_eur": 4502900.76420637
+      "max_revenue_effect": 19380.963047322028,
+      "max_sessions_effect": 852.7623740821691,
+      "total_spend_eur": 4722678.01735544
     },
     "Affiliate": {
       "adstock_decay": 0.2,
-      "hill_ec50": 190692.45412278766,
+      "hill_ec50": 189210.31659378638,
       "hill_slope": 1.0,
       "target_roi": 2.0,
-      "realized_roi": 1.9999999999999998,
+      "realized_roi": 2.0,
       "target_sessions_per_1000_eur": 50,
-      "max_revenue_effect": 5773.181601042757,
-      "max_sessions_effect": 144.32954002606894,
-      "total_spend_eur": 1878963.4965453728
+      "max_revenue_effect": 5519.7528269827535,
+      "max_sessions_effect": 137.99382067456884,
+      "total_spend_eur": 1615947.7403545813
     },
     "Out_of_Home": {
       "adstock_decay": 0.4,
-      "hill_ec50": 754476.6563835843,
+      "hill_ec50": 528560.8026170423,
       "hill_slope": 1.2,
       "target_roi": 1.0,
-      "realized_roi": 1.0000000000000002,
+      "realized_roi": 1.0,
       "target_sessions_per_1000_eur": 3,
-      "max_revenue_effect": 3427.2027353052777,
-      "max_sessions_effect": 10.281608205915832,
-      "total_spend_eur": 1774566.3628062746
+      "max_revenue_effect": 2522.9142299098617,
+      "max_sessions_effect": 7.568742689729586,
+      "total_spend_eur": 1485140.0755421056
     },
     "Radio": {
       "adstock_decay": 0.5,
-      "hill_ec50": 2870598.685911147,
+      "hill_ec50": 593759.8766149967,
       "hill_slope": 1.2,
       "target_roi": 1.1,
-      "realized_roi": 1.1,
+      "realized_roi": 1.0999999999999999,
       "target_sessions_per_1000_eur": 4,
-      "max_revenue_effect": 14315.043286083715,
-      "max_sessions_effect": 52.05470285848623,
-      "total_spend_eur": 6642947.975785699
+      "max_revenue_effect": 3254.177518389112,
+      "max_sessions_effect": 11.833372794142225,
+      "total_spend_eur": 1829640.2080026076
     }
   },
   "kpi": {
