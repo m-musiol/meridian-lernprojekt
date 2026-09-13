@@ -303,26 +303,144 @@ def media_to_long_df(media: dict, geo_df: pd.DataFrame, time_index: pd.DatetimeI
     return pd.concat(frames, ignore_index=True)
 
 
-def write_report(output_dir: pathlib.Path, ground_truth_dir: pathlib.Path, cfg: GeneratorConfig, channel_gt: dict) -> None:
-    report_path = pathlib.Path("reports/stufe1_datengenerierung_bericht.md")
-    report_path.parent.mkdir(parents=True, exist_ok=True)
+def compute_noise_layer_metrics(media_df: pd.DataFrame) -> dict:
+    """Fehlende-Wochen-Anteil je Kanal und TV<->Radio-Spend-Korrelation, fuer Stufe-2-Uebung."""
+    missing_share = media_df.groupby("channel")["spend_eur"].apply(lambda s: s.isna().mean())
+    affected_channels = missing_share[missing_share > 0]
+
+    wide_spend = media_df.pivot_table(index=["geo", "time"], columns="channel", values="spend_eur")
+    tv_radio_corr = wide_spend["TV"].corr(wide_spend["Radio"])
+    other_pairs = [
+        ("TV", "Programmatic_Display"), ("TV", "Paid_Social"), ("Radio", "Programmatic_Display"),
+    ]
+    other_corrs = {f"{a}<->{b}": wide_spend[a].corr(wide_spend[b]) for a, b in other_pairs}
+    return {
+        "missing_share_by_channel": affected_channels.to_dict(),
+        "tv_radio_correlation": tv_radio_corr,
+        "other_pair_correlations": other_corrs,
+    }
+
+
+def compute_kpi_summary(controls_kpi_df: pd.DataFrame) -> dict:
+    summary = {}
+    for col in ("revenue_eur", "website_sessions"):
+        series = controls_kpi_df[col]
+        summary[col] = {
+            "min": series.min(), "median": series.median(),
+            "mean": series.mean(), "max": series.max(),
+        }
+    return summary
+
+
+def write_report(
+    output_dir: pathlib.Path,
+    ground_truth_dir: pathlib.Path,
+    cfg: GeneratorConfig,
+    channel_gt: dict,
+    media_df: pd.DataFrame,
+    controls_kpi_df: pd.DataFrame,
+) -> None:
+    noise_metrics = compute_noise_layer_metrics(media_df)
+    kpi_summary = compute_kpi_summary(controls_kpi_df)
+
     lines = [
         "# Stufe 1 — Bericht: Synthetischer Nordpunkt-Datensatz (Datenquelle 2)\n",
-        f"Seed: `{cfg.seed}` | Geos: {cfg.n_geos} | Wochen: {cfg.n_weeks} | "
-        f"Start: {cfg.start_date} | Jahresbudget: {cfg.total_annual_media_budget_eur:,.0f} EUR\n",
-        "\n## Ground-Truth-ROI je Kanal (realisiert vs. Ziel)\n",
-        "| Kanal | Ziel-ROI | realisiert | Adstock-Decay | Hill-Slope |",
-        "|---|---|---|---|---|",
+        "Dieser Bericht wird automatisch bei jedem Lauf von `generate_nordpunkt_data.py` neu erzeugt "
+        "(nicht von Hand editieren — Aenderungen bitte im Skript vornehmen, siehe `write_report()`).\n",
+        "## 1. Erzeugungs-Parameter (Stellschrauben)\n",
+        "Diese Werte werden beim Aufruf des Skripts per CLI-Flag gesetzt (siehe `--help`) und "
+        "bestimmen Umfang und Schwierigkeitsgrad der generierten Daten:\n",
+        f"- **Seed:** `{cfg.seed}` — Startwert des Zufallsgenerators. Gleicher Seed + gleiche Parameter "
+        "= exakt reproduzierbare Daten (Pflicht laut `CLAUDE.md`, Punkt 7).",
+        f"- **Geos:** {cfg.n_geos} — Anzahl simulierter Regionen. Mehr Geos = mehr Beobachtungen fuer "
+        "die spaetere Modellschaetzung, aber auch mehr Parameter (siehe Gate-1-Heuristik in Stufe 2).",
+        f"- **Wochen:** {cfg.n_weeks} — Laenge der Zeitreihe. Zu kurz erschwert es, langsam wirkende "
+        "Adstock-Effekte (z.B. TV) und Jahressaisonalitaet ueberhaupt zu erkennen.",
+        f"- **Start:** {cfg.start_date} — erster Wochenmontag der Zeitreihe.",
+        f"- **Jahresbudget:** {cfg.total_annual_media_budget_eur:,.0f} EUR — nationales Media-Gesamtbudget "
+        "pro Jahr, auf die Kanaele gemaess `annual_budget_share` in `config.py` aufgeteilt.",
+        "\n## 2. Kanal-Kennzahlen: Ground Truth\n",
+        "\"Ground Truth\" heisst hier: die *wahren*, beim Generieren fest vorgegebenen Effektstaerken — "
+        "in echten Projekten unbekannt, hier bewusst bekannt, um spaeter (Stufe 8) zu pruefen, ob das "
+        "trainierte Meridian-Modell sie aus den Daten korrekt zurueckgewinnt (\"Parameter Recovery\").\n",
+        "| Kanal | Spend gesamt (EUR) | Ziel-ROI | realisierter ROI | Adstock-Decay | Hill-Slope | Hill-EC50 |",
+        "|---|---|---|---|---|---|---|",
     ]
     for name, gt in channel_gt.items():
         lines.append(
-            f"| {name} | {gt['target_roi']:.2f} | {gt['realized_roi']:.2f} | "
-            f"{gt['adstock_decay']:.2f} | {gt['hill_slope']:.2f} |"
+            f"| {name} | {gt['total_spend_eur']:,.0f} | {gt['target_roi']:.2f} | {gt['realized_roi']:.2f} | "
+            f"{gt['adstock_decay']:.2f} | {gt['hill_slope']:.2f} | {gt['hill_ec50']:,.0f} |"
         )
+
+    lines += [
+        "\n### Wie werden diese Kennzahlen berechnet, und was sagen sie aus?\n",
+        "- **Spend gesamt:** Summe von `spend_eur` ueber alle Geos und Wochen (fehlende Wochen zaehlen "
+        "als 0). Zeigt die Groessenordnung des Kanals im Media-Mix.",
+        "- **Adstock-Decay** (0–1): woechentliche \"Retention-Rate\" der Werbewirkung. Formel: "
+        "`adstocked[t] = exposure[t] + decay * adstocked[t-1]` (siehe `transforms.apply_adstock`). "
+        "Ein Wert von 0,6 (TV) bedeutet: 60 % der Wirkung einer Woche schwappen in die Folgewoche "
+        "rueber, bei 0,1 (Paid Search Brand) ist der Effekt fast schon nach einer Woche verpufft — "
+        "Suchintention ist kurzlebig, TV-Markenwirkung haelt laenger an.",
+        "- **Hill-Slope & Hill-EC50:** beschreiben gemeinsam die Saettigungskurve "
+        "`saturation = adstocked^slope / (adstocked^slope + ec50^slope)` (siehe "
+        "`transforms.hill_saturation`), Ergebnis zwischen 0 und 1. `Hill-EC50` ist der "
+        "Halbsaettigungspunkt: bei diesem (adstockten) Exposure-Niveau ist bereits 50 % der maximal "
+        "moeglichen Kanalwirkung erreicht — je hoeher der bisherige Spend im Verhaeltnis zum EC50, "
+        "desto staerker die abnehmenden Grenzertraege. `Hill-Slope` steuert, wie abrupt dieser "
+        "Uebergang von \"linear wachsend\" zu \"gesaettigt\" verlaeuft (hoeherer Wert = schaerferer Knick).",
+        "- **Ziel-ROI vs. realisierter ROI:** `Ziel-ROI` ist die in `config.py` vorgegebene Wunsch-Kennzahl "
+        "(Umsatz in EUR je ausgegebenem Euro). Waehrend der Generierung wird daraus ein Skalierungsfaktor "
+        "(`max_revenue_effect`) berechnet, mit dem die Saettigungskurve so skaliert wird, dass "
+        "`realisierter ROI = Summe(Umsatzbeitrag) / Summe(Spend)` moeglichst genau dem Ziel entspricht "
+        "(siehe `compute_channel_contributions`). Beide Werte sollten daher (fast) identisch sein — "
+        "eine spuerbare Abweichung waere ein Hinweis auf einen Rechenfehler in der Kalibrierung.",
+        "\n## 3. Bewusster Noise-Layer (relevant fuer Stufe 2)\n",
+        "Reale Mediadaten sind nie perfekt — deshalb baut der Generator zwei typische Praxisprobleme "
+        "absichtlich ein, damit die Datenqualitaetspruefung in Stufe 2 nicht trivial \"gruen\" ausfaellt:\n",
+    ]
+
+    for channel_name, share in noise_metrics["missing_share_by_channel"].items():
+        lines.append(
+            f"- **Fehlende Wochen bei {channel_name}:** {share:.1%} der Geo-Wochen sind `NaN` "
+            "(zufaellig je Geo ausgewaehlt, simuliert unvollstaendige Kanal-Meldungen/Datenlieferung)."
+        )
+    tv_radio_corr = noise_metrics["tv_radio_correlation"]
     lines.append(
-        f"\nAusgabe: `{output_dir.as_posix()}/` (media.csv, controls_kpi.csv), "
-        f"Ground Truth: `{ground_truth_dir.as_posix()}/`.\n"
+        f"- **TV↔Radio-Spend-Korrelation:** {tv_radio_corr:.3f} (Pearson-Korrelation des `spend_eur` "
+        "ueber alle Geo-Wochen). Radio-Spend wird bewusst teils aus dem TV-Spend abgeleitet "
+        "(`derive_radio_spend`), weil Media-Planer beide Kanaele in der Praxis oft gemeinsam takten — "
+        "das erschwert es einem Modell, die Einzelwirkung beider Kanaele sauber zu trennen "
+        "(Multikollinearitaet, klassischer VIF-Kandidat in Stufe 2). Zum Vergleich andere Kanalpaare: "
+        + ", ".join(f"{pair} = {corr:.3f}" for pair, corr in noise_metrics["other_pair_correlations"].items())
+        + " — deutlich niedriger, da dort nur die gemeinsame Saisonalitaet durchschlaegt, nicht die "
+        "gezielte Kopplung.",
     )
+
+    lines += [
+        "\n## 4. Verteilung der Zielgroessen (KPIs)\n",
+        "Werte je Geo-Woche, nach der Kombination aus Baseline + Kanalbeitraegen + Kontrolleffekten + "
+        "multiplikativem Messrauschen (`noise_sigma`):\n",
+        "| KPI | Minimum | Median | Mittelwert | Maximum |",
+        "|---|---|---|---|---|",
+    ]
+    for col, label in (("revenue_eur", "Revenue (EUR)"), ("website_sessions", "Website-Sessions")):
+        s = kpi_summary[col]
+        lines.append(f"| {label} | {s['min']:,.0f} | {s['median']:,.0f} | {s['mean']:,.0f} | {s['max']:,.0f} |")
+    lines += [
+        "\nKeine negativen Werte moeglich (durch `np.clip` vor dem Rauschen abgesichert). Die Spanne "
+        "zwischen Minimum und Maximum entsteht durch die Kombination aus unterschiedlich grossen Geos "
+        "(Bevoelkerung), Saisonalitaet (Q1-/Q4-Peaks) und den Media-/Kontrolleffekten — genau diese "
+        "Variation braucht ein MMM-Modell spaeter, um Kanalwirkungen ueberhaupt schaetzen zu koennen.\n",
+        "## 5. Ausgabedateien\n",
+        f"- `{output_dir.as_posix()}/media.csv` — Spend/Impressions/Reach/Frequency je Geo, Woche, Kanal (Long-Format).",
+        f"- `{output_dir.as_posix()}/controls_kpi.csv` — Controls, Organic-/Non-Media-Signale und beide KPIs je Geo/Woche.",
+        f"- `{output_dir.as_posix()}/geo_population.csv` — Bevoelkerung und Bevoelkerungsanteil je Geo.",
+        f"- `{ground_truth_dir.as_posix()}/nordpunkt_ground_truth.json` — alle wahren Parameter maschinenlesbar "
+        "(fuer den Modell-vs-Wahrheit-Vergleich in Stufe 8).",
+    ]
+
+    report_path = pathlib.Path("reports/stufe1_datengenerierung_bericht.md")
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -379,7 +497,7 @@ def main() -> None:
         json.dumps(ground_truth, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
-    write_report(output_dir, ground_truth_dir, cfg, channel_ground_truth)
+    write_report(output_dir, ground_truth_dir, cfg, channel_ground_truth, media_df, controls_kpi_df)
 
     print(f"Media-Daten: {media_df.shape}, Controls/KPI: {controls_kpi_df.shape}")
     print(f"Geschrieben nach: {output_dir}/ und {ground_truth_dir}/")
