@@ -97,3 +97,24 @@ identifizierbare Kollinearität (r≈0.59, VIF≈2.2, klar höchster Wert im Kan
 Einschränkung sind die bewusst eingebauten ~5,1 % fehlenden Wochen bei Out-of-Home/Radio (in
 `docs/model_card.md` dokumentiert). Alle anderen acht Kriterien grün. Vorgelegt zur Freigabe vor
 Beginn von Stufe 3 (EDA).
+
+---
+
+## 2026-09-18 — Fehlende Wochen behandelt (vorgezogener Teil von Stufe 4)
+
+**Entscheidung:** Nutzer wollte die Gate-1-Einschränkung (fehlende Wochen bei Out_of_Home/Radio) vor
+Stufe 3 behoben haben, statt sie nur zu dokumentieren und weiterzuziehen. Umgesetzt per linearer
+Interpolation je (Geo, Kanal) entlang der Zeit (`src/features/handle_missing_media_weeks.py`),
+Randfaelle (erste/letzte Woche einer Reihe fehlt) per Fill mit dem naechsten bekannten Wert.
+Rohdaten bleiben unveraendert (`data/raw/`), bereinigte Version liegt in
+`data/interim/nordpunkt_synthetic/media_clean.csv` mit `_imputed`-Flags je veraenderter Zelle.
+
+**Begruendung der Methode:** Luecken sind einzelne, zufaellig verteilte Wochen (keine
+zusammenhaengenden Ausfallperioden) bei einer sonst graduell schwankenden Zeitreihe — lineare
+Interpolation bewahrt den lokalen Verlauf, ohne wie Null-Fill eine falsche "kein Spend"-Woche
+vorzutaeuschen oder wie Mittelwert-Fill die Spend-Varianz zu verzerren. Details/Umfang in
+`reports/missing_weeks_imputation_bericht.md`.
+
+**Prozess-Notiz:** Dieser Schritt gehoert inhaltlich zu Stufe 4 (Feature Engineering), wurde aber auf
+Nutzerwunsch vorgezogen, damit Stufe 3 (EDA) auf bereits bereinigten Daten aufsetzt. Fuer Stufe 4
+verbleibt noch das vollstaendige Unified-Schema-Mapping (G×T-Arrays fuer Meridian).
