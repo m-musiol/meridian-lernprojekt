@@ -7,15 +7,21 @@ gewaehlt (kein Hard-Cutoff aus der Meridian-Doku), siehe docs/wissensbasis_pipel
 Abschnitt 2, Stufe 2.
 """
 
+from __future__ import annotations
+
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-EXPECTED_CONTROLS = (
-    "price_index", "promo_flag", "holiday_flag",
-    "temperature_c", "consumer_climate_index", "competitor_spend_proxy_eur",
-)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # src/ auf den Pfad
+from data_quality.geo_normalization import compute_vif, geo_week_spend_per_capita_matrix
+
+# Reserviert fuer die Auto-Erkennung von Kontrollvariablen (alles ausser diesen + KPI-Spalten
+# in controls_kpi.csv gilt als Control) — siehe check_controls_availability.
+RESERVED_NON_CONTROL_COLUMNS = ("geo", "time", "population")
 
 
 @dataclass
@@ -115,42 +121,13 @@ def check_spend_variance(media_df: pd.DataFrame) -> CheckResult:
     )
 
 
-def _geo_week_spend_per_capita_matrix(media_df: pd.DataFrame, geo_df: pd.DataFrame) -> pd.DataFrame:
-    """Kanal-Spend pro Kopf je (Geo, Woche)-Beobachtung — die Granularitaet, auf der Meridian
-
-    tatsaechlich schaetzt. Ohne Pro-Kopf-Normalisierung korrelieren praktisch alle Kanaele stark
-    miteinander, weil grosse Geos bei jedem Kanal automatisch mehr ausgeben als kleine — das ist
-    reiner Groesseneffekt, keine echte Kollinearitaet, und wuerde den Check unbrauchbar machen.
-    """
-    merged = media_df.merge(geo_df[["geo", "population"]], on="geo")
-    merged["spend_per_capita"] = merged["spend_eur"] / merged["population"]
-    return merged.pivot_table(index=["geo", "time"], columns="channel", values="spend_per_capita").fillna(0)
-
-
-def _compute_vif(national_df: pd.DataFrame) -> dict:
-    cols = list(national_df.columns)
-    x_full = national_df.to_numpy()
-    vif = {}
-    for i, col in enumerate(cols):
-        y = x_full[:, i]
-        x_others = np.delete(x_full, i, axis=1)
-        x_design = np.column_stack([np.ones(len(y)), x_others])
-        coefs, *_ = np.linalg.lstsq(x_design, y, rcond=None)
-        y_hat = x_design @ coefs
-        ss_res = np.sum((y - y_hat) ** 2)
-        ss_tot = np.sum((y - y.mean()) ** 2)
-        r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
-        vif[col] = 1 / (1 - r2) if r2 < 0.999 else float("inf")
-    return vif
-
-
 def check_collinearity(media_df: pd.DataFrame, geo_df: pd.DataFrame) -> CheckResult:
-    geo_week = _geo_week_spend_per_capita_matrix(media_df, geo_df)
+    geo_week = geo_week_spend_per_capita_matrix(media_df, geo_df)
     corr = geo_week.corr()
     np.fill_diagonal(corr.values, 0)
     max_corr = corr.values.max()
     max_pair = corr.stack().idxmax()
-    vif = _compute_vif(geo_week)
+    vif = compute_vif(geo_week)
     worst_channel = max(vif, key=vif.get)
     worst_vif = vif[worst_channel]
     if worst_vif < 5:
@@ -175,9 +152,11 @@ def check_collinearity(media_df: pd.DataFrame, geo_df: pd.DataFrame) -> CheckRes
     )
 
 
-def check_outliers_and_units(media_df: pd.DataFrame, controls_kpi_df: pd.DataFrame) -> CheckResult:
+def check_outliers_and_units(
+    media_df: pd.DataFrame, controls_kpi_df: pd.DataFrame, kpi_columns: tuple[str, ...]
+) -> CheckResult:
     negative_spend = int((media_df["spend_eur"] < 0).sum())
-    negative_kpi = int((controls_kpi_df[["revenue_eur", "website_sessions"]] < 0).sum().sum())
+    negative_kpi = int((controls_kpi_df[list(kpi_columns)] < 0).sum().sum())
 
     outlier_counts = {}
     for channel, group in media_df.groupby("channel"):
@@ -206,19 +185,34 @@ def check_outliers_and_units(media_df: pd.DataFrame, controls_kpi_df: pd.DataFra
     )
 
 
-def check_controls_availability(controls_kpi_df: pd.DataFrame) -> CheckResult:
-    missing_cols = [c for c in EXPECTED_CONTROLS if c not in controls_kpi_df.columns]
+def check_controls_availability(
+    controls_kpi_df: pd.DataFrame,
+    expected_controls: tuple[str, ...] | None = None,
+    kpi_columns: tuple[str, ...] = (),
+) -> CheckResult:
+    """`expected_controls=None` => aus den Daten ableiten (alle Spalten ausser geo/time/population/KPIs) —
+
+    noetig fuer hochgeladene Kunden, die keine explizite Kontrollvariablen-Liste deklarieren.
+    """
+    auto_detected = expected_controls is None
+    if auto_detected:
+        reserved = set(RESERVED_NON_CONTROL_COLUMNS) | set(kpi_columns)
+        expected_controls = tuple(c for c in controls_kpi_df.columns if c not in reserved)
+
+    missing_cols = [c for c in expected_controls if c not in controls_kpi_df.columns]
     if missing_cols:
         status = "rot"
         null_info = "n/a"
     else:
-        null_shares = controls_kpi_df[list(EXPECTED_CONTROLS)].isna().mean()
+        null_shares = controls_kpi_df[list(expected_controls)].isna().mean()
         status = "gruen" if null_shares.max() < 0.02 else "gelb"
         null_info = f"max. Lueckenanteil {null_shares.max():.1%}"
+    detection_note = " (automatisch erkannt)" if auto_detected else ""
     return CheckResult(
         name="Verfuegbarkeit Kontrollvariablen",
         status=status,
-        summary=f"Fehlende Spalten: {missing_cols or 'keine'}. {null_info}.",
+        summary=f"Controls{detection_note}: {list(expected_controls)}. Fehlende Spalten: "
+        f"{missing_cols or 'keine'}. {null_info}.",
         reasoning="Kontrollvariablen sind noetig, um Confounder (z.B. Preis, Promotion, Saisonalitaet) "
         "von der Media-Wirkung zu trennen — ohne sie droht Overattribution auf Media.",
         recommendation="" if status == "gruen" else "Fehlende/luecken­hafte Controls vor Stufe 5 ergaenzen.",
@@ -239,7 +233,26 @@ def check_geo_population(geo_df: pd.DataFrame, expected_n_geos: int) -> CheckRes
     )
 
 
-def check_reach_frequency(media_df: pd.DataFrame, expected_rf_channels: tuple) -> CheckResult:
+def check_reach_frequency(media_df: pd.DataFrame, expected_rf_channels: tuple[str, ...] | None = None) -> CheckResult:
+    """`expected_rf_channels=None` => aus den Daten ableiten (alle Kanaele mit befuellter reach-Spalte) —
+
+    noetig fuer hochgeladene Kunden, bei denen vorab nicht bekannt ist, welche Kanaele R/F liefern.
+    """
+    if expected_rf_channels is None:
+        has_reach = "reach" in media_df.columns
+        detected = tuple(
+            ch for ch in media_df["channel"].unique()
+            if has_reach and media_df.loc[media_df["channel"] == ch, "reach"].notna().any()
+        )
+        return CheckResult(
+            name="Reach/Frequency-Verfuegbarkeit",
+            status="gruen",
+            summary=f"Automatisch erkannte R/F-Kanaele: {list(detected) or 'keine'}.",
+            reasoning="Keine vordeklarierte Kanalliste vorhanden — es wird nur berichtet, welche "
+            "Kanaele tatsaechlich Reach/Frequency-Daten liefern.",
+            recommendation="",
+        )
+
     coverage = {}
     for channel in expected_rf_channels:
         sub = media_df[media_df["channel"] == channel]
@@ -249,7 +262,6 @@ def check_reach_frequency(media_df: pd.DataFrame, expected_rf_channels: tuple) -
         name="Reach/Frequency-Verfuegbarkeit",
         status=status,
         summary=f"Abdeckung je erwartetem R/F-Kanal: {coverage}.",
-        reasoning="Stakeholder-Briefing verlangt mind. 2 Kanaele mit Reach/Frequency fuer die "
-        "feinere Frequenzmodellierung.",
+        reasoning="Client-Config verlangt Reach/Frequency fuer diese Kanaele (feinere Frequenzmodellierung).",
         recommendation="" if status == "gruen" else "Fehlende R/F-Daten ergaenzen oder Kanal ohne R/F modellieren.",
     )

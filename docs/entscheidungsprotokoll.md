@@ -118,3 +118,45 @@ vorzutaeuschen oder wie Mittelwert-Fill die Spend-Varianz zu verzerren. Details/
 **Prozess-Notiz:** Dieser Schritt gehoert inhaltlich zu Stufe 4 (Feature Engineering), wurde aber auf
 Nutzerwunsch vorgezogen, damit Stufe 3 (EDA) auf bereits bereinigten Daten aufsetzt. Fuer Stufe 4
 verbleibt noch das vollstaendige Unified-Schema-Mapping (G×T-Arrays fuer Meridian).
+
+---
+
+## 2026-09-18 — Multi-Client-Generalisierung (Phasen 1-3): Pipeline nicht mehr Nordpunkt-exklusiv
+
+**Entscheidung:** Nutzer wollte die Pipeline explizit **jetzt vollstaendig** fuer beliebige Kunden
+einsetzbar machen (nicht nur leichtgewichtig vormerken), plus professionelle Stakeholder-
+Visualisierungen und eine Streamlit-App fuer komfortablen Upload/Interaktion (siehe Plan
+`parsed-herding-swan.md`). Umgesetzt in Phasen, jede einzeln verifiziert:
+
+- **Client-Config** (`src/client_config.py`, `clients/<id>/config.py`): `ChannelConfig` (unveraendert),
+  `GeneratorSettings` (nur fuer `data_source="synthetic"`), `ClientConfig` mit
+  `control_columns`/`reach_frequency_channels` = `None` als Auto-Erkennungs-Fallback (wichtig fuer
+  hochgeladene Kunden ohne deklarierte Metadaten). Python-Module statt YAML gewaehlt — keine neue
+  Lade-/Validierungsschicht noetig, Configs werden nur von der Entwicklerin angelegt, nicht von
+  Endnutzern editiert; bei Bedarf spaeter leicht auf YAML umstellbar.
+- **Import-Mechanik:** Path-Shim (`sys.path.insert(0, .../src)` + bare Import) statt `python -m` —
+  keine bestehende Aufruf-Konvention aendert sich, kein `pip install -e .` noetig.
+- **Generator** (`generate_nordpunkt_data.py` → `generate_synthetic_data.py --client <id>`): liest
+  `ClientConfig` statt Hardcode, CLI-Flags ueberschreiben nur explizit gesetzte Felder
+  (`dataclasses.replace`). Zwei Nordpunkt-Spezifika generisch gemacht, ohne die rng-Ziehungsreihenfolge
+  zu aendern: Cross-Channel-Organic-Boost faellt bei fehlendem Kanal auf 0 zurueck statt KeyError;
+  der Noise-Layer-Bericht findet das staerkste Kanalpaar generisch statt "TV"/"Radio" hart zu codieren.
+- **Stufe 2** (`checks.py`, `run_stage2_check.py`): `control_columns`/`reach_frequency_channels` kommen
+  aus der Client-Config; Pro-Kopf-Kollinearitaets-Hilfsfunktion nach `data_quality/geo_normalization.py`
+  verschoben (reiner Move, von Stufe 3 mitnutzbar).
+- **Wochen-Imputation** (`handle_missing_media_weeks.py`): `--client`-Flag, Pfade aus Client-Config.
+- **Pfad-Namespacing (Bugfix):** `reports/{client_id}/...`, `reports/stage_gates/{client_id}/...`,
+  `data/interim/{client_id}/...` — vorher generische Pfade haetten ein zweiter Kunde stillschweigend
+  ueberschrieben. Alte Nordpunkt-Reports per `git mv` in die neuen Pfade verschoben.
+
+**Regressionsschutz:** Nach jeder Phase `git diff` auf die bereits committeten Nordpunkt-Outputs
+(Ground-Truth-JSON, Stufe-1-Bericht, Stufe-2-Bericht) geprueft — in allen Faellen nur eine bewusste
+`client_id`-Metadaten-Ergaenzung bzw. generische Formulierungen, **keine** Zahlenabweichung. Zusaetzlich
+neuer, gezielter Test `tests/test_nordpunkt_ground_truth_regression.py` (Golden-Values fuer TV/Radio/
+Paid_Search_Brand) als dauerhafte Absicherung — bewusste kleine Ausnahme vom bisher rein manuellen
+Testvorgehen dieses Projekts.
+
+**Alte Pfadangaben in fruoeheren Eintraegen dieses Logs** (z.B. `reports/stage_gates/
+stage2_eignungsbericht.md`, `data/interim/nordpunkt_synthetic/...`) sind historisch korrekt fuer den
+Stand zum jeweiligen Zeitpunkt, wurden aber durch obiges Namespacing abgeloest — aktuelle Pfade siehe
+`docs/model_card.md` und `docs/datenquellen_register.md`.

@@ -10,8 +10,12 @@ Schritte (und das Modell-Team) echte von ergaenzten Werten unterscheiden koennen
 
 import argparse
 import pathlib
+import sys
 
 import pandas as pd
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # src/ auf den Pfad
+from client_config import load_client_config
 
 VALUE_COLUMNS = ("spend_eur", "impressions")
 
@@ -51,13 +55,13 @@ def summarize(media_df: pd.DataFrame, cleaned_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def write_report(summary: pd.DataFrame, output_path: pathlib.Path) -> None:
+def write_report(summary: pd.DataFrame, output_path: pathlib.Path, client_id: str, output_data_path: pathlib.Path) -> None:
     lines = [
         "# Behandlung fehlender Wochen (vorgezogener Teil von Stufe 4)\n",
-        "Betrifft die in Stufe 1 bewusst eingebauten Meldeluecken bei Out_of_Home/Radio "
-        "(siehe Gate 1, `reports/stage_gates/stage2_eignungsbericht.md`, 🟡 GELB). "
-        "Rohdaten (`data/raw/`) bleiben unveraendert; die bereinigte Version liegt in "
-        "`data/interim/nordpunkt_synthetic/media_clean.csv`.\n",
+        f"Betrifft die evtl. in Stufe 1 bewusst eingebauten Meldeluecken (Kunde `{client_id}`, siehe "
+        f"Gate 1, `reports/stage_gates/{client_id}/stage2_eignungsbericht.md`). "
+        f"Rohdaten (`data/raw/`) bleiben unveraendert; die bereinigte Version liegt in "
+        f"`{output_data_path.as_posix()}`.\n",
         "## Methode\n",
         "Lineare Interpolation je (Geo, Kanal) entlang der Zeit: fehlende Werte werden aus dem "
         "nächsten bekannten Wert davor und danach linear geschaetzt (`pandas.Series.interpolate`). "
@@ -90,13 +94,19 @@ def write_report(summary: pd.DataFrame, output_path: pathlib.Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Interpoliert fehlende Media-Wochen (Out_of_Home/Radio).")
-    parser.add_argument("--input", default="data/raw/nordpunkt_synthetic/media.csv")
-    parser.add_argument("--output", default="data/interim/nordpunkt_synthetic/media_clean.csv")
-    parser.add_argument("--report", default="reports/missing_weeks_imputation_bericht.md")
+    parser = argparse.ArgumentParser(description="Interpoliert fehlende Media-Wochen eines konfigurierten Kunden.")
+    parser.add_argument("--client", default="nordpunkt", help="Client-ID unter clients/<id>/config.py")
+    parser.add_argument("--input", default=None, help="Default: <client.data_dir>/media.csv")
+    parser.add_argument("--output", default=None, help="Default: data/interim/<client_id>/media_clean.csv")
+    parser.add_argument("--report", default=None, help="Default: reports/<client_id>/missing_weeks_imputation_bericht.md")
     args = parser.parse_args()
 
-    media_df = pd.read_csv(args.input, parse_dates=["time"])
+    client = load_client_config(args.client)
+    input_path = args.input or f"{client.data_dir}/media.csv"
+    output_path_arg = args.output or f"data/interim/{client.client_id}/media_clean.csv"
+    report_path_arg = args.report or f"reports/{client.client_id}/missing_weeks_imputation_bericht.md"
+
+    media_df = pd.read_csv(input_path, parse_dates=["time"])
     cleaned_df = media_df.groupby(["geo", "channel"], group_keys=True).apply(
         impute_group, include_groups=False
     ).reset_index(level=["geo", "channel"]).reset_index(drop=True)
@@ -105,12 +115,12 @@ def main() -> None:
     if remaining_na:
         raise ValueError(f"Nach Imputation sind noch {remaining_na} Zellen NaN — Randfall-Logik pruefen.")
 
-    output_path = pathlib.Path(args.output)
+    output_path = pathlib.Path(output_path_arg)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cleaned_df.to_csv(output_path, index=False)
 
     summary = summarize(media_df, cleaned_df)
-    write_report(summary, pathlib.Path(args.report))
+    write_report(summary, pathlib.Path(report_path_arg), client.client_id, output_path)
 
     print(f"Bereinigt: {output_path} ({len(cleaned_df)} Zeilen, 0 verbleibende NaN)")
     print(summary.to_string(index=False))

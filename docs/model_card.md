@@ -19,10 +19,11 @@ _(folgt in Stufe 5)_
 ## Bekannte Limitierungen
 
 - **Fehlende Wochen bei Out_of_Home und Radio (~5,1 %) — behandelt:** Ursprung: Stufe 2 (Gate 1,
-  🟡 GELB, siehe `reports/stage_gates/stage2_eignungsbericht.md`). Bewusst in den Generator eingebaute
-  Meldeluecken in `data/raw/nordpunkt_synthetic/media.csv`. Vor Stufe 3 per linearer Interpolation
-  behandelt (`src/features/handle_missing_media_weeks.py` → `data/interim/nordpunkt_synthetic/
-  media_clean.csv`), Details in `reports/missing_weeks_imputation_bericht.md`. Ergaenzte Zellen sind
+  🟡 GELB, siehe `reports/stage_gates/nordpunkt/stage2_eignungsbericht.md`). Bewusst in den Generator
+  eingebaute Meldeluecken in `data/raw/nordpunkt_synthetic/media.csv`. Vor Stufe 3 per linearer
+  Interpolation behandelt (`src/features/handle_missing_media_weeks.py --client nordpunkt` →
+  `data/interim/nordpunkt/media_clean.csv`), Details in
+  `reports/nordpunkt/missing_weeks_imputation_bericht.md`. Ergaenzte Zellen sind
   ueber `spend_eur_imputed`/`impressions_imputed`-Flags weiterhin unterscheidbar — bei der Diagnostik
   (Stufe 7) im Blick behalten, ob die betroffenen Kanaele auffaellig schlechter fitten.
 - **Moderate TV↔Radio-Kollinearitaet (r≈0,59, VIF≈2,2 auf Geo-Wochen-Ebene pro Kopf):** bewusst

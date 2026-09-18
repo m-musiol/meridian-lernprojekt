@@ -1,6 +1,6 @@
 # Behandlung fehlender Wochen (vorgezogener Teil von Stufe 4)
 
-Betrifft die in Stufe 1 bewusst eingebauten Meldeluecken bei Out_of_Home/Radio (siehe Gate 1, `reports/stage_gates/stage2_eignungsbericht.md`, 🟡 GELB). Rohdaten (`data/raw/`) bleiben unveraendert; die bereinigte Version liegt in `data/interim/nordpunkt_synthetic/media_clean.csv`.
+Betrifft die evtl. in Stufe 1 bewusst eingebauten Meldeluecken (Kunde `nordpunkt`, siehe Gate 1, `reports/stage_gates/nordpunkt/stage2_eignungsbericht.md`). Rohdaten (`data/raw/`) bleiben unveraendert; die bereinigte Version liegt in `data/interim/nordpunkt/media_clean.csv`.
 
 ## Methode
 
