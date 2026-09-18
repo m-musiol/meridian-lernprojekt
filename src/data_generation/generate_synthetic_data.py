@@ -1,30 +1,36 @@
-"""Generiert den synthetischen Nordpunkt-Datensatz (Datenquelle 2, Stufe 1).
+"""Generiert einen synthetischen Datensatz fuer einen konfigurierten Kunden (Datenquelle 2, Stufe 1).
 
-Erzeugt Media-, Kontroll- und KPI-Daten fuer die fiktive Marke "Nordpunkt Home & Living"
-gemaess docs/wissensbasis_pipeline.md Abschnitt 1 und docs/stakeholder_briefing.md.
-Alle wahren Effektstaerken (Adstock, Saettigung, ROI, Kontroll-Koeffizienten) werden als
-Ground Truth gespeichert, um Modell-Ergebnisse spaeter dagegen zu validieren (Stufe 8).
+Erzeugt Media-, Kontroll- und KPI-Daten gemaess der jeweiligen `clients/<client_id>/config.py`
+(siehe `src/client_config.py`). Alle wahren Effektstaerken (Adstock, Saettigung, ROI,
+Kontroll-Koeffizienten) werden als Ground Truth gespeichert, um Modell-Ergebnisse spaeter
+dagegen zu validieren (Stufe 8).
 
 Deterministisch ueber --seed; alle Stellschrauben (Geo-Zahl, Zeitraum, Rausch-Intensitaet,
-fehlende Wochen) sind CLI-Parameter, siehe --help.
+fehlende Wochen) sind per Client-Config vorgegeben und einzeln per CLI ueberschreibbar,
+siehe --help. Die Kontrollvariablen-/Organic-Formeln (Preisindex, Wetter, Saisonalitaet, ...)
+sind bewusst geteilte, generische Muster fuer alle synthetischen Demo-Kunden — keine
+kundenspezifische Formelsprache, um das Projekt nicht zu einer Generator-DSL aufzublasen.
 """
 
 import argparse
+import dataclasses
 import json
 import pathlib
+import sys
 
 import numpy as np
 import pandas as pd
 
-from config import ChannelConfig, GeneratorConfig
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # src/ auf den Pfad
+from client_config import ChannelConfig, ClientConfig, GeneratorSettings, load_client_config
 from transforms import apply_adstock, hill_saturation
 
 
-def make_time_index(cfg: GeneratorConfig) -> pd.DatetimeIndex:
+def make_time_index(cfg: GeneratorSettings) -> pd.DatetimeIndex:
     return pd.date_range(start=cfg.start_date, periods=cfg.n_weeks, freq="W-MON")
 
 
-def make_geo_population(cfg: GeneratorConfig, rng: np.random.Generator) -> pd.DataFrame:
+def make_geo_population(cfg: GeneratorSettings, rng: np.random.Generator) -> pd.DataFrame:
     raw_weights = rng.lognormal(mean=0.0, sigma=0.6, size=cfg.n_geos)
     shares = raw_weights / raw_weights.sum()
     population = shares * cfg.total_population
@@ -46,7 +52,7 @@ def make_holiday_flag(time_index: pd.DatetimeIndex) -> np.ndarray:
 
 
 def national_spend_series(
-    channel: ChannelConfig, cfg: GeneratorConfig, seasonal: np.ndarray, rng: np.random.Generator
+    channel: ChannelConfig, cfg: GeneratorSettings, seasonal: np.ndarray, rng: np.random.Generator
 ) -> np.ndarray:
     annual_budget = cfg.total_annual_media_budget_eur * channel.annual_budget_share
     base_weekly = annual_budget / 52.0
@@ -88,7 +94,7 @@ def split_across_geos(
 def derive_radio_spend(
     tv_spend_geo: np.ndarray,
     channel: ChannelConfig,
-    cfg: GeneratorConfig,
+    cfg: GeneratorSettings,
     seasonal: np.ndarray,
     geo_df: pd.DataFrame,
     rng: np.random.Generator,
@@ -141,7 +147,7 @@ def inject_missing_weeks(
 
 
 def build_media_data(
-    cfg: GeneratorConfig, rng: np.random.Generator, geo_df: pd.DataFrame, seasonal: np.ndarray
+    cfg: GeneratorSettings, rng: np.random.Generator, geo_df: pd.DataFrame, seasonal: np.ndarray
 ) -> dict:
     """Erzeugt Spend/Impressions/Reach/Frequency je Kanal als (n_geos x n_weeks)-Arrays."""
     media = {}
@@ -175,7 +181,7 @@ def build_media_data(
 
 
 def compute_channel_contributions(
-    media: dict, cfg: GeneratorConfig
+    media: dict, cfg: GeneratorSettings
 ) -> tuple[dict, dict, dict]:
     """Adstock + Hill-Saettigung je Kanal/Geo, kalibriert auf den Ziel-ROI bzw. Ziel-Sessions.
 
@@ -211,8 +217,19 @@ def compute_channel_contributions(
     return revenue_contrib, sessions_contrib, ground_truth
 
 
+def _channel_impressions_or_zero(media: dict, channel_name: str, n_geos: int, n_weeks: int) -> np.ndarray:
+    """Impressions eines Kanals, falls vorhanden — sonst 0 (Kunde hat diesen Kanal evtl. nicht).
+
+    Fuer Nordpunkt (hat beide Kanaele) unveraendertes Verhalten; erlaubt anderen Client-Configs
+    ohne "Paid_Search_Brand"/"Paid_Social" einen graceful Fallback statt eines KeyError.
+    """
+    if channel_name not in media:
+        return np.zeros((n_geos, n_weeks))
+    return np.nan_to_num(media[channel_name]["impressions"], nan=0.0)
+
+
 def generate_controls_and_organic(
-    cfg: GeneratorConfig,
+    cfg: GeneratorSettings,
     rng: np.random.Generator,
     time_index: pd.DatetimeIndex,
     geo_df: pd.DataFrame,
@@ -231,12 +248,12 @@ def generate_controls_and_organic(
     organic_search_clicks = (
         1000 * geo_df["pop_share"].to_numpy().reshape(-1, 1) * (1 + 0.001 * np.arange(n_weeks))
         * rng.lognormal(0, 0.15, size=(n_geos, n_weeks))
-        + 0.01 * np.nan_to_num(media["Paid_Search_Brand"]["impressions"], nan=0.0)
+        + 0.01 * _channel_impressions_or_zero(media, "Paid_Search_Brand", n_geos, n_weeks)
     )
     social_organic_reach = (
         2000 * geo_df["pop_share"].to_numpy().reshape(-1, 1)
         * rng.lognormal(0, 0.2, size=(n_geos, n_weeks))
-        + 0.02 * np.nan_to_num(media["Paid_Social"]["impressions"], nan=0.0)
+        + 0.02 * _channel_impressions_or_zero(media, "Paid_Social", n_geos, n_weeks)
     )
     distribution_points = np.round(
         50 * geo_df["pop_share"].to_numpy().reshape(-1, 1) * (1 + 0.001 * np.arange(n_weeks))
@@ -264,12 +281,14 @@ def generate_controls_and_organic(
 
 
 def generate_kpis(
-    cfg: GeneratorConfig,
+    cfg: GeneratorSettings,
     rng: np.random.Generator,
     geo_df: pd.DataFrame,
     controls_df: pd.DataFrame,
     revenue_contrib: dict,
     sessions_contrib: dict,
+    primary_kpi_column: str = "revenue_eur",
+    secondary_kpi_column: str = "website_sessions",
 ) -> tuple[pd.DataFrame, dict]:
     n_geos, n_weeks = cfg.n_geos, cfg.n_weeks
     total_revenue_contrib = sum(revenue_contrib.values())
@@ -305,7 +324,10 @@ def generate_kpis(
     time_index = controls_df["time"].unique()
     frames = []
     for i, geo in enumerate(geo_df["geo"]):
-        frames.append(pd.DataFrame({"geo": geo, "time": time_index, "revenue_eur": revenue[i], "website_sessions": sessions[i]}))
+        frames.append(pd.DataFrame({
+            "geo": geo, "time": time_index,
+            primary_kpi_column: revenue[i], secondary_kpi_column: sessions[i],
+        }))
     kpi_df = pd.concat(frames, ignore_index=True)
 
     kpi_ground_truth = {
@@ -333,8 +355,10 @@ def media_to_long_df(media: dict, geo_df: pd.DataFrame, time_index: pd.DatetimeI
 
 
 def compute_noise_layer_metrics(media_df: pd.DataFrame, geo_df: pd.DataFrame) -> dict:
-    """Fehlende-Wochen-Anteil je Kanal und TV<->Radio-Spend-Korrelation (pro Kopf, Geo-Wochen-Ebene).
+    """Fehlende-Wochen-Anteil je Kanal und die staerkste Kanal-Spend-Korrelation (pro Kopf, Geo-Wochen).
 
+    Generisch gehalten (sucht die staerkste Korrelation, statt einen Kanalnamen wie "TV"/"Radio"
+    hart zu codieren), damit es fuer jede Client-Config funktioniert, nicht nur fuer Nordpunkt.
     Pro-Kopf-Normalisierung ist noetig: in absoluten EUR wuerde die Korrelation ueberwiegend den
     Geo-Groesseneffekt messen (grosse Geos geben bei JEDEM Kanal mehr aus), nicht echte zeitliche
     Kollinearitaet. Gleiche Methodik wie src/data_quality/checks.py, damit beide Berichte konsistent sind.
@@ -347,25 +371,28 @@ def compute_noise_layer_metrics(media_df: pd.DataFrame, geo_df: pd.DataFrame) ->
     wide = merged.pivot_table(index=["geo", "time"], columns="channel", values="spend_per_capita").fillna(0)
     corr = wide.corr()
     np.fill_diagonal(corr.values, 0)
-    tv_radio_corr = corr.loc["TV", "Radio"]
 
-    corr_without_tv_radio = corr.copy()
-    corr_without_tv_radio.loc["TV", "Radio"] = 0
-    corr_without_tv_radio.loc["Radio", "TV"] = 0
-    highest_other_pair = corr_without_tv_radio.stack().idxmax()
-    highest_other_corr = corr_without_tv_radio.values.max()
+    highest_pair = corr.stack().idxmax()
+    highest_corr = corr.values.max()
+
+    corr_without_highest = corr.copy()
+    corr_without_highest.loc[highest_pair[0], highest_pair[1]] = 0
+    corr_without_highest.loc[highest_pair[1], highest_pair[0]] = 0
+    second_pair = corr_without_highest.stack().idxmax()
+    second_corr = corr_without_highest.values.max()
 
     return {
         "missing_share_by_channel": affected_channels.to_dict(),
-        "tv_radio_correlation": tv_radio_corr,
-        "highest_other_pair": highest_other_pair,
-        "highest_other_pair_corr": highest_other_corr,
+        "highest_pair": highest_pair,
+        "highest_correlation": highest_corr,
+        "second_pair": second_pair,
+        "second_correlation": second_corr,
     }
 
 
-def compute_kpi_summary(controls_kpi_df: pd.DataFrame) -> dict:
+def compute_kpi_summary(controls_kpi_df: pd.DataFrame, kpi_columns: tuple[str, ...]) -> dict:
     summary = {}
-    for col in ("revenue_eur", "website_sessions"):
+    for col in kpi_columns:
         series = controls_kpi_df[col]
         summary[col] = {
             "min": series.min(), "median": series.median(),
@@ -377,18 +404,20 @@ def compute_kpi_summary(controls_kpi_df: pd.DataFrame) -> dict:
 def write_report(
     output_dir: pathlib.Path,
     ground_truth_dir: pathlib.Path,
-    cfg: GeneratorConfig,
+    cfg: GeneratorSettings,
     channel_gt: dict,
     media_df: pd.DataFrame,
     controls_kpi_df: pd.DataFrame,
     geo_df: pd.DataFrame,
+    client: ClientConfig,
 ) -> None:
     noise_metrics = compute_noise_layer_metrics(media_df, geo_df)
-    kpi_summary = compute_kpi_summary(controls_kpi_df)
+    kpi_columns = (client.primary_kpi_column, client.secondary_kpi_column)
+    kpi_summary = compute_kpi_summary(controls_kpi_df, kpi_columns)
 
     lines = [
-        "# Stufe 1 — Bericht: Synthetischer Nordpunkt-Datensatz (Datenquelle 2)\n",
-        "Dieser Bericht wird automatisch bei jedem Lauf von `generate_nordpunkt_data.py` neu erzeugt "
+        f"# Stufe 1 — Bericht: Synthetischer Datensatz ({client.display_name}, Datenquelle 2)\n",
+        "Dieser Bericht wird automatisch bei jedem Lauf von `generate_synthetic_data.py` neu erzeugt "
         "(nicht von Hand editieren — Aenderungen bitte im Skript vornehmen, siehe `write_report()`).\n",
         "## 1. Erzeugungs-Parameter (Stellschrauben)\n",
         "Diese Werte werden beim Aufruf des Skripts per CLI-Flag gesetzt (siehe `--help`) und "
@@ -400,8 +429,9 @@ def write_report(
         f"- **Wochen:** {cfg.n_weeks} — Laenge der Zeitreihe. Zu kurz erschwert es, langsam wirkende "
         "Adstock-Effekte (z.B. TV) und Jahressaisonalitaet ueberhaupt zu erkennen.",
         f"- **Start:** {cfg.start_date} — erster Wochenmontag der Zeitreihe.",
-        f"- **Jahresbudget:** {cfg.total_annual_media_budget_eur:,.0f} EUR — nationales Media-Gesamtbudget "
-        "pro Jahr, auf die Kanaele gemaess `annual_budget_share` in `config.py` aufgeteilt.",
+        f"- **Jahresbudget:** {cfg.total_annual_media_budget_eur:,.0f} {client.currency} — nationales "
+        "Media-Gesamtbudget pro Jahr, auf die Kanaele gemaess `annual_budget_share` in der "
+        f"Client-Config (`clients/{client.client_id}/config.py`) aufgeteilt.",
         "\n## 2. Kanal-Kennzahlen: Ground Truth\n",
         "\"Ground Truth\" heisst hier: die *wahren*, beim Generieren fest vorgegebenen Effektstaerken — "
         "in echten Projekten unbekannt, hier bewusst bekannt, um spaeter (Stufe 8) zu pruefen, ob das "
@@ -447,18 +477,19 @@ def write_report(
             f"- **Fehlende Wochen bei {channel_name}:** {share:.1%} der Geo-Wochen sind `NaN` "
             "(zufaellig je Geo ausgewaehlt, simuliert unvollstaendige Kanal-Meldungen/Datenlieferung)."
         )
-    tv_radio_corr = noise_metrics["tv_radio_correlation"]
-    other_pair = noise_metrics["highest_other_pair"]
-    other_corr = noise_metrics["highest_other_pair_corr"]
+    highest_pair = noise_metrics["highest_pair"]
+    highest_corr = noise_metrics["highest_correlation"]
+    second_pair = noise_metrics["second_pair"]
+    second_corr = noise_metrics["second_correlation"]
     lines.append(
-        f"- **TV↔Radio-Spend-Korrelation:** {tv_radio_corr:.3f} (Pearson-Korrelation des Spends "
-        "pro Kopf je Geo-Woche — absolute EUR-Werte wuerden vor allem den Geo-Groesseneffekt messen, "
-        "siehe `compute_noise_layer_metrics`). Radio behaelt sein eigenes Budget, aber ein Teil "
-        "seiner Verteilung ueber Geo/Zeit folgt bewusst dem TV-Muster (`derive_radio_spend`), weil "
-        "Media-Planer beide Kanaele in der Praxis oft gemeinsam takten — das erschwert es einem "
-        "Modell, die Einzelwirkung beider Kanaele sauber zu trennen (Multikollinearitaet, klassischer "
-        f"VIF-Kandidat in Stufe 2). Hoechste Korrelation unter allen anderen Kanalpaaren: "
-        f"{other_pair[0]}<->{other_pair[1]} = {other_corr:.3f} — spuerbar niedriger, da dort nur die "
+        f"- **Staerkste Kanal-Spend-Korrelation:** {highest_pair[0]}↔{highest_pair[1]} = {highest_corr:.3f} "
+        "(Pearson-Korrelation des Spends pro Kopf je Geo-Woche — absolute EUR-Werte wuerden vor allem "
+        "den Geo-Groesseneffekt messen, siehe `compute_noise_layer_metrics`). Falls einer der beiden "
+        "Kanaele bewusst am Muster des anderen ausgerichtet ist (siehe `derive_radio_spend` fuer das "
+        "Nordpunkt-Beispiel TV/Radio), ist das Absicht: Media-Planer takten verwandte Kanaele in der "
+        "Praxis oft gemeinsam, was es einem Modell erschwert, die Einzelwirkung sauber zu trennen "
+        f"(Multikollinearitaet, klassischer VIF-Kandidat in Stufe 2). Naechsthoechstes Kanalpaar: "
+        f"{second_pair[0]}↔{second_pair[1]} = {second_corr:.3f} — spuerbar niedriger, da dort nur die "
         "gemeinsame (leicht kanal-spezifisch verschobene) Saisonalitaet durchschlaegt, nicht die "
         "gezielte Kopplung.",
     )
@@ -470,8 +501,11 @@ def write_report(
         "| KPI | Minimum | Median | Mittelwert | Maximum |",
         "|---|---|---|---|---|",
     ]
-    for col, label in (("revenue_eur", "Revenue (EUR)"), ("website_sessions", "Website-Sessions")):
+    for col in kpi_columns:
         s = kpi_summary[col]
+        label = col.removesuffix("_eur").replace("_", " ").title()
+        if col.endswith("_eur"):
+            label += f" ({client.currency})"
         lines.append(f"| {label} | {s['min']:,.0f} | {s['median']:,.0f} | {s['mean']:,.0f} | {s['max']:,.0f} |")
     lines += [
         "\nKeine negativen Werte moeglich (durch `np.clip` vor dem Rauschen abgesichert). Die Spanne "
@@ -482,39 +516,50 @@ def write_report(
         f"- `{output_dir.as_posix()}/media.csv` — Spend/Impressions/Reach/Frequency je Geo, Woche, Kanal (Long-Format).",
         f"- `{output_dir.as_posix()}/controls_kpi.csv` — Controls, Organic-/Non-Media-Signale und beide KPIs je Geo/Woche.",
         f"- `{output_dir.as_posix()}/geo_population.csv` — Bevoelkerung und Bevoelkerungsanteil je Geo.",
-        f"- `{ground_truth_dir.as_posix()}/nordpunkt_ground_truth.json` — alle wahren Parameter maschinenlesbar "
-        "(fuer den Modell-vs-Wahrheit-Vergleich in Stufe 8).",
+        f"- `{ground_truth_dir.as_posix()}/{client.client_id}_ground_truth.json` — alle wahren Parameter "
+        "maschinenlesbar (fuer den Modell-vs-Wahrheit-Vergleich in Stufe 8).",
     ]
 
-    report_path = pathlib.Path("reports/stufe1_datengenerierung_bericht.md")
+    report_path = pathlib.Path(f"reports/{client.client_id}/stufe1_datengenerierung_bericht.md")
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generiert den synthetischen Nordpunkt-Datensatz.")
-    parser.add_argument("--seed", type=int, default=GeneratorConfig.seed)
-    parser.add_argument("--n-geos", type=int, default=GeneratorConfig.n_geos)
-    parser.add_argument("--n-weeks", type=int, default=GeneratorConfig.n_weeks)
-    parser.add_argument("--start-date", default=GeneratorConfig.start_date)
-    parser.add_argument("--annual-media-budget", type=float, default=GeneratorConfig.total_annual_media_budget_eur)
-    parser.add_argument("--noise-sigma", type=float, default=GeneratorConfig.noise_sigma)
-    parser.add_argument("--missing-week-rate", type=float, default=GeneratorConfig.missing_week_rate)
-    parser.add_argument("--output-dir", default="data/raw/nordpunkt_synthetic")
-    parser.add_argument("--ground-truth-dir", default="data/ground_truth")
+    parser = argparse.ArgumentParser(
+        description="Generiert einen synthetischen Datensatz fuer einen konfigurierten Kunden."
+    )
+    parser.add_argument("--client", default="nordpunkt", help="Client-ID unter clients/<id>/config.py")
+    # Alle folgenden Flags ueberschreiben nur, wenn sie explizit gesetzt werden (sonst Client-Default).
+    parser.add_argument("--seed", type=int, default=None)
+    parser.add_argument("--n-geos", type=int, default=None)
+    parser.add_argument("--n-weeks", type=int, default=None)
+    parser.add_argument("--start-date", default=None)
+    parser.add_argument("--annual-media-budget", type=float, default=None)
+    parser.add_argument("--noise-sigma", type=float, default=None)
+    parser.add_argument("--missing-week-rate", type=float, default=None)
+    parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--ground-truth-dir", default=None)
     args = parser.parse_args()
 
-    cfg = GeneratorConfig(
-        seed=args.seed, n_geos=args.n_geos, n_weeks=args.n_weeks, start_date=args.start_date,
-        total_annual_media_budget_eur=args.annual_media_budget, noise_sigma=args.noise_sigma,
-        missing_week_rate=args.missing_week_rate,
-    )
-    rng = np.random.default_rng(cfg.seed)
-    output_dir = pathlib.Path(args.output_dir)
-    ground_truth_dir = pathlib.Path(args.ground_truth_dir)
+    client = load_client_config(args.client)
+    if client.data_source != "synthetic" or client.generator is None:
+        raise ValueError(f"Client '{client.client_id}' hat data_source='{client.data_source}', braucht 'synthetic'.")
+
+    overrides = {
+        "seed": args.seed, "n_geos": args.n_geos, "n_weeks": args.n_weeks, "start_date": args.start_date,
+        "total_annual_media_budget_eur": args.annual_media_budget, "noise_sigma": args.noise_sigma,
+        "missing_week_rate": args.missing_week_rate,
+    }
+    overrides = {k: v for k, v in overrides.items() if v is not None}
+    cfg = dataclasses.replace(client.generator, **overrides) if overrides else client.generator
+
+    output_dir = pathlib.Path(args.output_dir or client.data_dir)
+    ground_truth_dir = pathlib.Path(args.ground_truth_dir or client.ground_truth_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     ground_truth_dir.mkdir(parents=True, exist_ok=True)
 
+    rng = np.random.default_rng(cfg.seed)
     time_index = make_time_index(cfg)
     geo_df = make_geo_population(cfg, rng)
     seasonal = make_seasonal_multiplier(cfg.n_weeks)
@@ -522,7 +567,10 @@ def main() -> None:
     media = build_media_data(cfg, rng, geo_df, seasonal)
     revenue_contrib, sessions_contrib, channel_ground_truth = compute_channel_contributions(media, cfg)
     controls_df = generate_controls_and_organic(cfg, rng, time_index, geo_df, media)
-    kpi_df, kpi_ground_truth = generate_kpis(cfg, rng, geo_df, controls_df, revenue_contrib, sessions_contrib)
+    kpi_df, kpi_ground_truth = generate_kpis(
+        cfg, rng, geo_df, controls_df, revenue_contrib, sessions_contrib,
+        primary_kpi_column=client.primary_kpi_column, secondary_kpi_column=client.secondary_kpi_column,
+    )
 
     media_df = media_to_long_df(media, geo_df, time_index)
     controls_kpi_df = controls_df.merge(kpi_df, on=["geo", "time"])
@@ -532,6 +580,7 @@ def main() -> None:
     geo_df.to_csv(output_dir / "geo_population.csv", index=False)
 
     ground_truth = {
+        "client_id": client.client_id,
         "config": {
             "seed": cfg.seed, "n_geos": cfg.n_geos, "n_weeks": cfg.n_weeks,
             "start_date": cfg.start_date, "total_annual_media_budget_eur": cfg.total_annual_media_budget_eur,
@@ -540,12 +589,13 @@ def main() -> None:
         "channels": channel_ground_truth,
         "kpi": kpi_ground_truth,
     }
-    (ground_truth_dir / "nordpunkt_ground_truth.json").write_text(
+    (ground_truth_dir / f"{client.client_id}_ground_truth.json").write_text(
         json.dumps(ground_truth, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
-    write_report(output_dir, ground_truth_dir, cfg, channel_ground_truth, media_df, controls_kpi_df, geo_df)
+    write_report(output_dir, ground_truth_dir, cfg, channel_ground_truth, media_df, controls_kpi_df, geo_df, client)
 
+    print(f"Client: {client.display_name} ({client.client_id})")
     print(f"Media-Daten: {media_df.shape}, Controls/KPI: {controls_kpi_df.shape}")
     print(f"Geschrieben nach: {output_dir}/ und {ground_truth_dir}/")
 

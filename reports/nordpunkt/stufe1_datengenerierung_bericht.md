@@ -1,6 +1,6 @@
-# Stufe 1 — Bericht: Synthetischer Nordpunkt-Datensatz (Datenquelle 2)
+# Stufe 1 — Bericht: Synthetischer Datensatz (Nordpunkt Home & Living, Datenquelle 2)
 
-Dieser Bericht wird automatisch bei jedem Lauf von `generate_nordpunkt_data.py` neu erzeugt (nicht von Hand editieren — Aenderungen bitte im Skript vornehmen, siehe `write_report()`).
+Dieser Bericht wird automatisch bei jedem Lauf von `generate_synthetic_data.py` neu erzeugt (nicht von Hand editieren — Aenderungen bitte im Skript vornehmen, siehe `write_report()`).
 
 ## 1. Erzeugungs-Parameter (Stellschrauben)
 
@@ -10,7 +10,7 @@ Diese Werte werden beim Aufruf des Skripts per CLI-Flag gesetzt (siehe `--help`)
 - **Geos:** 10 — Anzahl simulierter Regionen. Mehr Geos = mehr Beobachtungen fuer die spaetere Modellschaetzung, aber auch mehr Parameter (siehe Gate-1-Heuristik in Stufe 2).
 - **Wochen:** 156 — Laenge der Zeitreihe. Zu kurz erschwert es, langsam wirkende Adstock-Effekte (z.B. TV) und Jahressaisonalitaet ueberhaupt zu erkennen.
 - **Start:** 2021-01-04 — erster Wochenmontag der Zeitreihe.
-- **Jahresbudget:** 10,000,000 EUR — nationales Media-Gesamtbudget pro Jahr, auf die Kanaele gemaess `annual_budget_share` in `config.py` aufgeteilt.
+- **Jahresbudget:** 10,000,000 EUR — nationales Media-Gesamtbudget pro Jahr, auf die Kanaele gemaess `annual_budget_share` in der Client-Config (`clients/nordpunkt/config.py`) aufgeteilt.
 
 ## 2. Kanal-Kennzahlen: Ground Truth
 
@@ -41,7 +41,7 @@ Reale Mediadaten sind nie perfekt — deshalb baut der Generator zwei typische P
 
 - **Fehlende Wochen bei Out_of_Home:** 5.1% der Geo-Wochen sind `NaN` (zufaellig je Geo ausgewaehlt, simuliert unvollstaendige Kanal-Meldungen/Datenlieferung).
 - **Fehlende Wochen bei Radio:** 5.1% der Geo-Wochen sind `NaN` (zufaellig je Geo ausgewaehlt, simuliert unvollstaendige Kanal-Meldungen/Datenlieferung).
-- **TV↔Radio-Spend-Korrelation:** 0.589 (Pearson-Korrelation des Spends pro Kopf je Geo-Woche — absolute EUR-Werte wuerden vor allem den Geo-Groesseneffekt messen, siehe `compute_noise_layer_metrics`). Radio behaelt sein eigenes Budget, aber ein Teil seiner Verteilung ueber Geo/Zeit folgt bewusst dem TV-Muster (`derive_radio_spend`), weil Media-Planer beide Kanaele in der Praxis oft gemeinsam takten — das erschwert es einem Modell, die Einzelwirkung beider Kanaele sauber zu trennen (Multikollinearitaet, klassischer VIF-Kandidat in Stufe 2). Hoechste Korrelation unter allen anderen Kanalpaaren: Paid_Search_NonBrand<->Paid_Social = 0.525 — spuerbar niedriger, da dort nur die gemeinsame (leicht kanal-spezifisch verschobene) Saisonalitaet durchschlaegt, nicht die gezielte Kopplung.
+- **Staerkste Kanal-Spend-Korrelation:** Radio↔TV = 0.589 (Pearson-Korrelation des Spends pro Kopf je Geo-Woche — absolute EUR-Werte wuerden vor allem den Geo-Groesseneffekt messen, siehe `compute_noise_layer_metrics`). Falls einer der beiden Kanaele bewusst am Muster des anderen ausgerichtet ist (siehe `derive_radio_spend` fuer das Nordpunkt-Beispiel TV/Radio), ist das Absicht: Media-Planer takten verwandte Kanaele in der Praxis oft gemeinsam, was es einem Modell erschwert, die Einzelwirkung sauber zu trennen (Multikollinearitaet, klassischer VIF-Kandidat in Stufe 2). Naechsthoechstes Kanalpaar: Paid_Search_NonBrand↔Paid_Social = 0.525 — spuerbar niedriger, da dort nur die gemeinsame (leicht kanal-spezifisch verschobene) Saisonalitaet durchschlaegt, nicht die gezielte Kopplung.
 
 ## 4. Verteilung der Zielgroessen (KPIs)
 
@@ -50,7 +50,7 @@ Werte je Geo-Woche, nach der Kombination aus Baseline + Kanalbeitraegen + Kontro
 | KPI | Minimum | Median | Mittelwert | Maximum |
 |---|---|---|---|---|
 | Revenue (EUR) | 103,669 | 360,791 | 363,831 | 778,694 |
-| Website-Sessions | 2,806 | 8,875 | 9,041 | 19,961 |
+| Website Sessions | 2,806 | 8,875 | 9,041 | 19,961 |
 
 Keine negativen Werte moeglich (durch `np.clip` vor dem Rauschen abgesichert). Die Spanne zwischen Minimum und Maximum entsteht durch die Kombination aus unterschiedlich grossen Geos (Bevoelkerung), Saisonalitaet (Q1-/Q4-Peaks) und den Media-/Kontrolleffekten — genau diese Variation braucht ein MMM-Modell spaeter, um Kanalwirkungen ueberhaupt schaetzen zu koennen.
 
