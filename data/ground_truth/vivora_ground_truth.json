@@ -1,0 +1,103 @@
+{
+  "client_id": "vivora",
+  "config": {
+    "seed": 7,
+    "n_geos": 6,
+    "n_weeks": 156,
+    "start_date": "2021-01-04",
+    "total_annual_media_budget_eur": 3000000.0,
+    "noise_sigma": 0.05,
+    "missing_week_rate": 0.0
+  },
+  "channels": {
+    "Paid_Social": {
+      "adstock_decay": 0.25,
+      "hill_ec50": 409569.5475445305,
+      "hill_slope": 1.3,
+      "target_roi": 1.8,
+      "realized_roi": 1.8000000000000003,
+      "target_sessions_per_1000_eur": 60,
+      "max_revenue_effect": 8206.098335469858,
+      "max_sessions_effect": 273.5366111823286,
+      "total_spend_eur": 2186102.275082001
+    },
+    "Paid_Search_Brand": {
+      "adstock_decay": 0.1,
+      "hill_ec50": 95853.37129689929,
+      "hill_slope": 1.0,
+      "target_roi": 3.5,
+      "realized_roi": 3.5,
+      "target_sessions_per_1000_eur": 80,
+      "max_revenue_effect": 9711.938677333994,
+      "max_sessions_effect": 221.98716976763416,
+      "total_spend_eur": 1045100.0104189988
+    },
+    "Paid_Search_NonBrand": {
+      "adstock_decay": 0.15,
+      "hill_ec50": 169963.38550436782,
+      "hill_slope": 1.0,
+      "target_roi": 2.2,
+      "realized_roi": 2.2,
+      "target_sessions_per_1000_eur": 100,
+      "max_revenue_effect": 8644.416127050968,
+      "max_sessions_effect": 392.928005775044,
+      "total_spend_eur": 1709795.2968434305
+    },
+    "Programmatic_Display": {
+      "adstock_decay": 0.2,
+      "hill_ec50": 873678.4487897302,
+      "hill_slope": 1.0,
+      "target_roi": 1.1,
+      "realized_roi": 1.1,
+      "target_sessions_per_1000_eur": 50,
+      "max_revenue_effect": 4441.961534110779,
+      "max_sessions_effect": 201.90734245958086,
+      "total_spend_eur": 1770827.069893134
+    },
+    "Video_YouTube": {
+      "adstock_decay": 0.3,
+      "hill_ec50": 193706.26964868224,
+      "hill_slope": 1.2,
+      "target_roi": 1.3,
+      "realized_roi": 1.2999999999999998,
+      "target_sessions_per_1000_eur": 35,
+      "max_revenue_effect": 3806.65200105952,
+      "max_sessions_effect": 102.48678464391016,
+      "total_spend_eur": 1097401.6032188176
+    },
+    "Influencer": {
+      "adstock_decay": 0.35,
+      "hill_ec50": 252581.6959003447,
+      "hill_slope": 1.2,
+      "target_roi": 1.6,
+      "realized_roi": 1.5999999999999992,
+      "target_sessions_per_1000_eur": 45,
+      "max_revenue_effect": 4840.347886829187,
+      "max_sessions_effect": 136.13478431707088,
+      "total_spend_eur": 1315066.9656925998
+    },
+    "App_Install_Ads": {
+      "adstock_decay": 0.15,
+      "hill_ec50": 86709.24484918472,
+      "hill_slope": 1.0,
+      "target_roi": 1.4,
+      "realized_roi": 1.4,
+      "target_sessions_per_1000_eur": 150,
+      "max_revenue_effect": 3169.0257187563884,
+      "max_sessions_effect": 339.5384698667559,
+      "total_spend_eur": 956561.1739042203
+    }
+  },
+  "kpi": {
+    "baseline_revenue_per_capita_eur": 0.08,
+    "baseline_sessions_per_capita": 0.002,
+    "control_coefficients_revenue": {
+      "price_index": -800.0,
+      "promo_flag": 15000.0,
+      "holiday_flag": 25000.0,
+      "consumer_climate_index": 400.0,
+      "competitor_spend_proxy_eur": -0.02
+    },
+    "kpi_noise_sigma": 0.05
+  }
+}
