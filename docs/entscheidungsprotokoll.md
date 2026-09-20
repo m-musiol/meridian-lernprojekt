@@ -37,15 +37,15 @@ Google Colab (kostenlose GPU), siehe `CLAUDE.md` Abschnitt 4 und Punkt 11.
 
 ## 2026-09-13 — Repo-Struktur / Git-Isolation
 
-**Befund:** `C:\Users\marcm\datascience\DS` ist selbst die Wurzel eines bestehenden Git-Repos (Remote
-`git@github.com:m-musiol/reddit_stock_analyzer.git`), das alle Projektunterordner enthält. Dessen
-`.gitignore` schließt jedoch pauschal alles außer `/reddy/` aus — `meridian-lernprojekt/` wird von diesem
+**Befund:** Der übergeordnete lokale Workspace-Ordner (der alle Projektordner des Nutzers enthält) ist
+selbst die Wurzel eines bestehenden, unabhängigen Git-Repos mit einem eigenen Remote. Dessen
+`.gitignore` schließt jedoch pauschal fast alles aus — `meridian-lernprojekt/` wird von diesem
 äußeren Repo also nicht getrackt.
 
 **Entscheidung:** `meridian-lernprojekt/` erhält ein eigenständiges, neu initialisiertes Git-Repo
 (`git init` in diesem Ordner) und ein eigenes GitHub-Repo (`gh repo create`, privat), unabhängig vom
-äußeren `DS`-Repo und von `reddit_stock_analyzer`. So bleibt dieses Lernprojekt sauber von anderen,
-unabhängigen Projekten (Trading-/Reddit-Analyse) getrennt.
+äußeren Workspace-Repo und von anderen, unabhängigen Projekten des Nutzers dort. So bleibt dieses
+Lernprojekt sauber von anderen, thematisch nicht verwandten Projekten getrennt.
 
 ---
 
