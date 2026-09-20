@@ -13,13 +13,21 @@ dist/
 # Environment / Secrets
 .env
 
-# Daten: deterministisch per Seed reproduzierbar (siehe README), daher nicht versioniert
+# Daten: deterministisch per Seed reproduzierbar (siehe README), daher nicht versioniert —
+# AUSSER den Demo-Kunden-Daten, die die oeffentliche Streamlit-App tatsaechlich als Dateien
+# braucht (Streamlit Community Cloud hat sonst keinen Zugriff auf lokal generierte CSVs).
 data/raw/*
 data/interim/*
 data/processed/*
 !data/raw/.gitkeep
 !data/interim/.gitkeep
 !data/processed/.gitkeep
+!data/raw/nordpunkt_synthetic/
+!data/raw/nordpunkt_synthetic/**
+!data/raw/vivora_synthetic/
+!data/raw/vivora_synthetic/**
+!data/interim/nordpunkt/
+!data/interim/nordpunkt/**
 
 # data/ground_truth/ wird bewusst versioniert (Modell-vs-Wahrheit-Vergleich, Lernzweck)
 

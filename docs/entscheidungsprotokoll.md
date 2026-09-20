@@ -199,3 +199,20 @@ haette aber einen langsamen/fehleranfaelligen Streamlit-Cloud-Build riskiert.
 App-Hilfsfunktionen direkt importiert und gegen beide Demo-Kunden sowie die Upload-Vorlagen
 durchlaufen lassen (inkl. des oben beschriebenen Bugfixes), zusaetzlich zweimal lokal per
 `streamlit run` gestartet und per `curl` auf sauberen Start (HTTP 200, keine Traceback im Log) geprueft.
+
+---
+
+## 2026-09-20 — Demo-Daten doch versioniert (Ausnahme von der Reproduzierbarkeits-Regel)
+
+**Befund:** Die live deployte Streamlit-App (`meridian-lernprojekt.streamlit.app`) warf einen
+`FileNotFoundError` — `data/raw/` ist bewusst nicht versioniert (deterministisch per Seed
+reproduzierbar), aber Streamlit Community Cloud klont nur das GitHub-Repo und hat keinen Zugriff
+auf lokal generierte CSVs.
+
+**Entscheidung:** Gezielte Ausnahme im `.gitignore`: `data/raw/nordpunkt_synthetic/`,
+`data/raw/vivora_synthetic/` und `data/interim/nordpunkt/media_clean.csv` (~3,6 MB gesamt) werden
+doch versioniert, obwohl sie technisch reproduzierbar waeren — die oeffentliche Demo-App braucht sie
+als tatsaechliche Dateien, nicht nur das Rezept zu ihrer Erzeugung. Unbedenklich, da rein synthetische
+Daten (kein Datenschutzproblem) und klein genug fuers Repo. Bei einer Neugenerierung (neuer Seed,
+mehr Geos etc.) muessen diese Dateien manuell erneut committed werden, sonst zeigt die Demo veraltete
+Daten.
