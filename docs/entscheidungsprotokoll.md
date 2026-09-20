@@ -160,3 +160,42 @@ Testvorgehen dieses Projekts.
 stage2_eignungsbericht.md`, `data/interim/nordpunkt_synthetic/...`) sind historisch korrekt fuer den
 Stand zum jeweiligen Zeitpunkt, wurden aber durch obiges Namespacing abgeloest — aktuelle Pfade siehe
 `docs/model_card.md` und `docs/datenquellen_register.md`.
+
+---
+
+## 2026-09-20 — Multi-Client-Generalisierung (Phasen 5-7): EDA, Streamlit-App, Doku
+
+**Stufe 3 (EDA) und Visualisierung:** Sechs Charts (`src/visualization/charts.py`), bewusst
+begrenzt: kein Kartenmaterial (synthetische Geos ohne echte Form waeren nur Dekoration), keine
+volle STL-Saisonzerlegung (kein `statsmodels`-Bedarf fuer dieses Projekt), kein Dual-Achsen-Chart
+fuer Spend-vs-KPI (anerkanntes Anti-Pattern, suggeriert Zusammenhang durch willkuerliche
+Achsenskalierung — stattdessen beide Reihen auf 100 indexiert, eine Achse). Kollinearitaets-Heatmap
+nutzt bewusst dieselbe Funktion (`data_quality/geo_normalization.py`) wie Gate 1, damit beide Zahlen
+nie auseinanderlaufen koennen. Ausgabe als eigenstaendige interaktive HTML-Dateien (Plotly via CDN),
+kein `kaleido`/PNG-Export noetig — spart eine native Abhaengigkeit, HTML ist fuer Stakeholder ohnehin
+naeher am "richtigen" Dashboard-Gefuehl als ein statisches Bild.
+
+**Unified Input Schema (`docs/unified_input_schema.md`):** Struktur-Pflichtspalten sind fix
+(`geo`/`time`/`channel`/`spend_eur`/`impressions` bzw. `geo`/`population`), KPI-Spaltennamen sind
+frei und werden beim Upload explizit ausgewaehlt, Kontrollvariablen und Reach/Frequency-Kanaele
+werden aus den Daten automatisch erkannt (`control_columns`/`reach_frequency_channels = None` in
+`ClientConfig`) statt vom Nutzer deklariert — haelt den Upload so komfortabel wie moeglich.
+
+**Streamlit-App (`app/streamlit_app.py`):** Demo-Kunde waehlen oder drei CSVs hochladen, drei Tabs
+(Datenuebersicht, Stufe 2, Stufe 3), reine Wiederverwendung bestehender Module — keine eigene Logik.
+**Wichtiger Bugfix waehrend des Baus:** Eine fruehe Version hat fuer alle Tabs einheitlich die
+bereinigten Stufe-4-Daten bevorzugt (wie `run_stage3_eda.py`) — dadurch lief Stufe 2 versehentlich auf
+bereinigten statt Rohdaten und ergab fuer Nordpunkt "rot" statt des bereits committeten "gelb" (die
+lineare Interpolation der fehlenden Radio-Wochen glaettet gerade den Teil, der die TV/Radio-Korrelation
+kuenstlich senkt — auf bereinigten Daten stieg sie auf 0.95). Behoben: Stufe 2 liest immer Rohdaten
+(entspricht ihrem Zweck, die Daten *vor* jeder Bereinigung zu bewerten), Stufe 3 bevorzugt weiterhin
+bereinigte Daten falls vorhanden.
+
+**Deploy-Absicherung:** `app/requirements.txt` bewusst schlank (streamlit/pandas/numpy/plotly) statt
+des Root-`requirements.txt`, das `google-meridian`/TensorFlow enthaelt — die App importiert das nie,
+haette aber einen langsamen/fehleranfaelligen Streamlit-Cloud-Build riskiert.
+
+**Verifikation:** Kein Browser in dieser Umgebung installiert (Playwright/Chromium fehlt) — stattdessen
+App-Hilfsfunktionen direkt importiert und gegen beide Demo-Kunden sowie die Upload-Vorlagen
+durchlaufen lassen (inkl. des oben beschriebenen Bugfixes), zusaetzlich zweimal lokal per
+`streamlit run` gestartet und per `curl` auf sauberen Start (HTTP 200, keine Traceback im Log) geprueft.

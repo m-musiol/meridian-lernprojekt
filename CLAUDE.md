@@ -147,32 +147,45 @@ meridian-lernprojekt/
 ├── .vscode/
 │   ├── settings.json                    # Interpreter-Pfad auf venv fixiert
 │   └── extensions.json                  # empfohlene Extensions (Python, Jupyter)
+├── clients/                             # EIN Unterordner je Kunde (Config, kein Code)
+│   ├── nordpunkt/config.py              # ClientConfig: Nordpunkt Home & Living (Haupt-Lernfall)
+│   └── vivora/config.py                 # ClientConfig: zweiter Demo-Kunde (beweist Generalisierung)
 ├── docs/
 │   ├── wissensbasis_pipeline.md         # Datenstrategie, Pipeline-Stufen, Personas, Automatisierung, Glossar
-│   ├── stakeholder_briefing.md          # Stage 0 Output
+│   ├── stakeholder_briefing.md          # Stage 0 Output (Nordpunkt)
+│   ├── unified_input_schema.md          # Spaltenvertrag fuer media/controls_kpi/geo_population.csv
 │   ├── datenquellen_register.md         # Herkunft/Lizenz/Synthetic-Flag jeder Datenquelle
 │   ├── entscheidungsprotokoll.md        # Decision Log
 │   └── model_card.md                    # aktueller Modellstand
 ├── data/
-│   ├── raw/                             # unveränderte Rohdaten (synthetic/open)
-│   ├── interim/                         # Zwischenstände
+│   ├── raw/                             # unveränderte Rohdaten (synthetic/open), ein Ordner je Kunde
+│   ├── interim/<client_id>/             # Zwischenstände (z.B. media_clean.csv nach Stufe 4)
 │   ├── processed/                       # modellfertige Daten (Unified-Schema-nah)
-│   └── ground_truth/                    # wahre Generatorparameter der Synthetikdaten (nur für Lernzweck-Vergleich)
+│   └── ground_truth/                    # wahre Generatorparameter, <client_id>_ground_truth.json
 ├── src/
-│   ├── data_generation/                 # synthetischer Datengenerator
-│   ├── data_quality/                    # Stage 2: Eignungsprüfung
-│   ├── features/                        # Stage 4: Feature Engineering
+│   ├── client_config.py                 # ClientConfig/ChannelConfig/GeneratorSettings + Loader
+│   ├── data_generation/                 # synthetischer Datengenerator (Stage 1, --client-gesteuert)
+│   ├── data_quality/                    # Stage 2: Eignungsprüfung + geo_normalization (geteilt mit EDA)
+│   ├── features/                        # Stage 4: Feature Engineering (u.a. Missing-Weeks-Imputation)
+│   ├── eda/                             # Stage 3: EDA-Orchestrierung
+│   ├── visualization/                   # geteilte Plotly-Chart-Bausteine (Stage 3, spaeter 8/11, App)
 │   ├── modeling/                        # Stage 5-6: ModelSpec, Training
 │   ├── diagnostics/                     # Stage 7: Validierung
 │   ├── interpretation/                  # Stage 8: ROI/mROI/Response-Kurven
 │   ├── forecasting/                     # Stage 9
 │   ├── optimization/                    # Stage 10: Budget-Optimizer
 │   └── reporting/                       # Stage 11: Stakeholder-Outputs
+├── app/
+│   ├── streamlit_app.py                 # Multi-Client-Dashboard (Demo-Kunde waehlen oder Upload)
+│   ├── requirements.txt                 # schlanke Deploy-Deps fuer Streamlit Community Cloud
+│   └── templates/                       # downloadbare Vorlagen-CSVs (Unified Input Schema)
 ├── notebooks/                           # explorative/diagnostische Notebooks
 ├── n8n/
 │   └── workflows/                       # exportierte n8n-Workflow-JSONs
 ├── reports/
-│   ├── stage_gates/                     # Gate-Reports (Ampel + Begründung)
+│   ├── <client_id>/                     # Stufe-1-Bericht, Missing-Weeks-Bericht (je Kunde)
+│   ├── stage_gates/<client_id>/         # Gate-Reports (Ampel + Begründung), je Kunde
+│   ├── eda/<client_id>/                 # Stufe-3-Charts (HTML) + eda_bericht.md, je Kunde
 │   └── stakeholder/                     # persona-spezifische Outputs
 └── tests/
 ```
