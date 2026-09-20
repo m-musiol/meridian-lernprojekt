@@ -1,0 +1,7 @@
+geo,time,channel,spend_eur,impressions,reach,frequency
+Region_01,2024-01-01,TV,12000,1500000,400000,3.75
+Region_01,2024-01-01,Paid_Social,8000,900000,300000,3.0
+Region_01,2024-01-08,TV,11500,1440000,395000,3.65
+Region_01,2024-01-08,Paid_Social,8200,930000,305000,3.05
+Region_02,2024-01-01,TV,7000,850000,,
+Region_02,2024-01-01,Paid_Social,5000,560000,,

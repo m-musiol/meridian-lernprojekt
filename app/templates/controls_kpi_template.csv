@@ -1,0 +1,5 @@
+geo,time,population,price_index,promo_flag,revenue_eur,website_sessions
+Region_01,2024-01-01,4200000,100.0,0,185000,5200
+Region_01,2024-01-08,4200000,100.4,1,201000,5600
+Region_02,2024-01-01,1800000,99.5,0,76000,2100
+Region_02,2024-01-08,1800000,99.7,0,78000,2150

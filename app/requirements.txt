@@ -1,0 +1,8 @@
+# Schlankes Requirements-File nur fuer die Streamlit-App (Streamlit Community Cloud:
+# "Advanced settings" -> "Requirements file path" auf app/requirements.txt setzen).
+# Bewusst OHNE google-meridian/TensorFlow aus dem Root-requirements.txt — die App nutzt sie nie,
+# wuerde aber einen langsamen/fehleranfaelligen Cloud-Build riskieren, wenn sie mitinstalliert wuerden.
+streamlit>=1.50
+pandas>=2.0
+numpy>=1.24
+plotly>=5.18

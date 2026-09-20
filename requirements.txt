@@ -9,6 +9,9 @@ numpy>=1.24
 matplotlib>=3.7
 plotly>=5.18
 
+# Streamlit-App (lokale Entwicklung; fuer den Cloud-Deploy siehe app/requirements.txt)
+streamlit>=1.50
+
 # Notebooks
 jupyter>=1.0
 ipykernel>=6.25
