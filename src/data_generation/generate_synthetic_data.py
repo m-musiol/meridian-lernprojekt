@@ -370,7 +370,9 @@ def compute_noise_layer_metrics(media_df: pd.DataFrame, geo_df: pd.DataFrame) ->
     merged["spend_per_capita"] = merged["spend_eur"] / merged["population"]
     wide = merged.pivot_table(index=["geo", "time"], columns="channel", values="spend_per_capita").fillna(0)
     corr = wide.corr()
-    np.fill_diagonal(corr.values, 0)
+    # .where() statt np.fill_diagonal(corr.values, ...): neuere pandas/numpy-Kombinationen geben aus
+    # .values teils ein read-only Array zurueck, an dem eine In-Place-Zuweisung fehlschlaegt.
+    corr = corr.where(~np.eye(len(corr), dtype=bool), 0.0)
 
     highest_pair = corr.stack().idxmax()
     highest_corr = corr.values.max()

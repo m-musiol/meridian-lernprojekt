@@ -124,7 +124,9 @@ def check_spend_variance(media_df: pd.DataFrame) -> CheckResult:
 def check_collinearity(media_df: pd.DataFrame, geo_df: pd.DataFrame) -> CheckResult:
     geo_week = geo_week_spend_per_capita_matrix(media_df, geo_df)
     corr = geo_week.corr()
-    np.fill_diagonal(corr.values, 0)
+    # .where() statt np.fill_diagonal(corr.values, ...): neuere pandas/numpy-Kombinationen geben aus
+    # .values teils ein read-only Array zurueck, an dem eine In-Place-Zuweisung fehlschlaegt.
+    corr = corr.where(~np.eye(len(corr), dtype=bool), 0.0)
     max_corr = corr.values.max()
     max_pair = corr.stack().idxmax()
     vif = compute_vif(geo_week)
